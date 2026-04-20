@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SubTok — TikTok Subtitles</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c26;
+    --border: #2a2a3a;
+    --accent: #fe2c55;
+    --accent2: #25f4ee;
+    --text: #f0f0f0;
+    --muted: #888;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', -apple-system, sans-serif; min-height: 100vh; }
+
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 20px 32px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .logo { font-size: 24px; font-weight: 900; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .logo-sub { font-size: 13px; color: var(--muted); font-weight: 400; }
+
+  .layout { display: grid; grid-template-columns: 380px 1fr; height: calc(100vh - 65px); overflow: hidden; }
+
+  .sidebar {
+    background: var(--surface); border-right: 1px solid var(--border);
+    overflow-y: auto; display: flex; flex-direction: column; gap: 0;
+  }
+  .section { padding: 20px; border-bottom: 1px solid var(--border); }
+  .section-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 14px; }
+
+  .main { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 32px 20px; text-align: center; cursor: pointer;
+    transition: all 0.2s; background: var(--surface2);
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(254,44,85,0.05); }
+  .upload-icon { font-size: 36px; margin-bottom: 10px; }
+  .upload-label { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .upload-sub { font-size: 12px; color: var(--muted); }
+  .upload-zone input { display: none; }
+
+  /* Controls */
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; margin-top: 12px; }
+  label:first-of-type { margin-top: 0; }
+  select, input[type=range], input[type=color], input[type=number] {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+    appearance: none; outline: none;
+  }
+  select:focus, input:focus { border-color: var(--accent2); }
+  input[type=range] { padding: 4px 0; cursor: pointer; accent-color: var(--accent); }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+
+  .color-row { display: flex; gap: 8px; align-items: center; }
+  .color-row input[type=color] { width: 42px; height: 36px; padding: 2px; cursor: pointer; border-radius: 8px; flex-shrink: 0; }
+  .color-row span { font-size: 12px; color: var(--muted); }
+
+  /* Preset chips */
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .preset-chip {
+    padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border); cursor: pointer; transition: all 0.15s;
+    background: var(--surface2);
+  }
+  .preset-chip:hover { border-color: var(--accent2); color: var(--accent2); }
+  .preset-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  /* Btn */
+  .btn {
+    width: 100%; padding: 12px; border-radius: var(--radius); font-size: 14px;
+    font-weight: 700; border: none; cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #ff3b5c); color: white; }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(254,44,85,0.4); }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent2); color: var(--accent2); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+  /* Progress */
+  .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin: 12px 0; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 2px; transition: width 0.3s; width: 0; }
+  .status-text { font-size: 12px; color: var(--muted); text-align: center; min-height: 18px; }
+
+  /* Main content */
+  .preview-area { flex: 1; display: flex; gap: 0; overflow: hidden; }
+
+  .video-panel {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 24px; background: #050508; position: relative;
+  }
+  .video-wrapper { position: relative; max-width: 100%; max-height: 100%; }
+  video { max-width: 100%; max-height: calc(100vh - 200px); border-radius: var(--radius); display: block; }
+  .video-placeholder {
+    width: 300px; height: 500px; border-radius: var(--radius);
+    background: var(--surface2); border: 2px dashed var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px; color: var(--muted);
+  }
+  .video-placeholder .ph-icon { font-size: 48px; }
+
+  /* Subtitle canvas overlay */
+  #sub-canvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; border-radius: var(--radius);
+  }
+
+  /* Segments panel */
+  .segments-panel {
+    width: 340px; background: var(--surface); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .segments-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .segments-header h3 { font-size: 13px; font-weight: 700; }
+  .seg-count { font-size: 11px; color: var(--muted); background: var(--surface2); padding: 2px 8px; border-radius: 10px; }
+  .segments-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .segment-card {
+    padding: 10px 12px; border-radius: 8px; margin-bottom: 4px;
+    background: var(--surface2); border: 1px solid transparent;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .segment-card:hover { border-color: var(--border); }
+  .segment-card.active { border-color: var(--accent2); background: rgba(37,244,238,0.05); }
+  .seg-time { font-size: 10px; color: var(--accent2); font-family: monospace; margin-bottom: 4px; }
+  .seg-text { font-size: 13px; line-height: 1.4; }
+  .seg-words { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .seg-word {
+    font-size: 11px; padding: 2px 7px; border-radius: 4px;
+    background: var(--border); color: var(--muted);
+  }
+  .seg-word.highlight { background: var(--accent); color: white; }
+
+  /* Export bar */
+  .export-bar {
+    padding: 16px 20px; border-top: 1px solid var(--border);
+    background: var(--surface); display: flex; gap: 8px; align-items: center;
+  }
+  .export-bar .btn { width: auto; padding: 10px 18px; font-size: 13px; }
+
+  /* Toggle */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+  .toggle-label { font-size: 13px; }
+  .toggle {
+    width: 40px; height: 22px; background: var(--border); border-radius: 11px;
+    cursor: pointer; position: relative; transition: background 0.2s;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: ''; position: absolute; width: 16px; height: 16px;
+    background: white; border-radius: 50%; top: 3px; left: 3px; transition: left 0.2s;
+  }
+  .toggle.on::after { left: 21px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  /* Animations */
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .pulsing { animation: pulse 1.5s infinite; }
+
+  .lang-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px;
+    background: rgba(37,244,238,0.15); color: var(--accent2); margin-left: 8px;
+  }
+
+  /* Emoji */
+  .seg-emoji-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .seg-emoji-badge {
+    font-size: 20px; cursor: pointer; border-radius: 6px; padding: 2px 4px;
+    background: var(--border); transition: transform 0.1s;
+    position: relative;
+  }
+  .seg-emoji-badge:hover { transform: scale(1.2); }
+  .seg-emoji-badge .remove-emoji {
+    display: none; position: absolute; top: -6px; right: -6px;
+    background: var(--accent); color: white; border-radius: 50%;
+    width: 14px; height: 14px; font-size: 9px; line-height: 14px; text-align: center;
+  }
+  .seg-emoji-badge:hover .remove-emoji { display: block; }
+  .add-emoji-btn {
+    font-size: 14px; padding: 3px 8px; border-radius: 6px; cursor: pointer;
+    background: var(--surface2); border: 1px dashed var(--border); color: var(--muted);
+    transition: all 0.15s;
+  }
+  .add-emoji-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  .emoji-picker {
+    position: fixed; z-index: 1000; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px; width: 280px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .emoji-picker-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .emoji-picker-title { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .emoji-picker-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0; }
+  .emoji-category { font-size: 10px; color: var(--muted); margin: 8px 0 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .emoji-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+  .emoji-opt {
+    font-size: 22px; padding: 4px; border-radius: 6px; cursor: pointer;
+    transition: background 0.1s; line-height: 1;
+  }
+  .emoji-opt:hover { background: var(--surface2); transform: scale(1.15); }
+  .emoji-opt.selected { background: rgba(254,44,85,0.2); outline: 1px solid var(--accent); }
+  .emoji-autodetect-btn { margin-bottom: 10px; }
+  .emoji-toggle-row { margin-top: 10px; }
+
+  /* GIF */
+  .gif-search-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .gif-search-row input { flex: 1; }
+  .gif-search-btn { background: var(--accent2); color: #000; border: none; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; flex-shrink: 0; font-weight: 700; }
+  .gif-search-btn:hover { opacity: 0.85; }
+  .gif-results { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-height: 200px; overflow-y: auto; margin-top: 8px; }
+  .gif-thumb { border-radius: 6px; overflow: hidden; cursor: pointer; aspect-ratio: 1; background: var(--surface2); position: relative; border: 2px solid transparent; transition: border-color 0.15s; }
+  .gif-thumb:hover { border-color: var(--accent2); }
+  .gif-thumb.selected { border-color: var(--accent); }
+  .gif-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gif-assign-target { margin-bottom: 10px; }
+  .seg-gif-badge { display: flex; align-items: center; gap: 6px; margin-top: 6px; background: var(--border); border-radius: 6px; padding: 4px 6px; }
+  .seg-gif-badge img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
+  .seg-gif-badge .gif-remove { background: var(--accent); border: none; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; cursor: pointer; margin-left: auto; flex-shrink: 0; }
+  .gif-overlay-item { position: absolute; pointer-events: none; border-radius: 4px; overflow: hidden; }
+  .gif-overlay-item video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* Crop */
+  .crop-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; border-radius: var(--radius); }
+  .crop-darken { position: absolute; inset: 0; background: rgba(0,0,0,0.55); }
+  .crop-window { position: absolute; background: transparent; box-shadow: 0 0 0 9999px rgba(0,0,0,0.55); border: 2px solid var(--accent2); box-sizing: border-box; }
+  .crop-label { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); background: var(--accent2); color: #000; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .crop-aspect-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .crop-chip { padding: 6px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; border: 1px solid var(--border); cursor: pointer; background: var(--surface2); transition: all 0.15s; }
+  .crop-chip:hover { border-color: var(--accent2); }
+  .crop-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .crop-export-btn { margin-top: 12px; }
+  .gif-search-section { margin-top: 10px; }
+  .gif-position-label { margin-top: 10px; }
+  .gif-show-toggle-row { margin-top: 10px; }
+  .giphy-key-input { margin-top: 10px; font-size: 11px; opacity: 0.6; }
+  .crop-toggle-row { margin-top: 10px; }
+
+  /* AI Highlights */
+  .hl-actions { display: flex; gap: 6px; margin-top: 12px; }
+  .hl-actions .btn { flex: 1; padding: 10px 8px; font-size: 12px; }
+  .hl-divider { height: 1px; background: var(--border); margin: 14px 0; }
+  .hl-claude-row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .hl-claude-row input { flex: 1; }
+  .hl-claude-btn { padding: 8px 10px; font-size: 12px; }
+  .hl-export-btn { margin-top: 12px; }
+  .hl-stats { font-size: 11px; color: var(--accent2); margin-top: 8px; min-height: 16px; text-align: center; }
+
+  /* Segment score bar */
+  .seg-score-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .seg-score-bar-bg { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; cursor: pointer; }
+  .seg-score-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .seg-score-pct { font-size: 10px; color: var(--muted); width: 30px; text-align: right; flex-shrink: 0; }
+  .seg-include-toggle { width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--muted); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .seg-include-toggle.included { background: #22c55e; border-color: #22c55e; }
+  .seg-include-toggle.included::after { content: '✓'; font-size: 9px; color: white; }
+  .segment-card.hl-excluded { opacity: 0.45; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">SubTok</div>
+    <div class="logo-sub">TikTok-style subtitles with local Whisper</div>
+  </div>
+</header>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <!-- Upload -->
+    <div class="section">
+      <div class="section-title">Video</div>
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+        <div class="upload-icon">🎬</div>
+        <div class="upload-label">Drop video here</div>
+        <div class="upload-sub">MP4, MOV, MKV, WebM</div>
+        <input type="file" id="file-input" accept="video/*">
+      </div>
+      <div id="file-name" style="font-size:12px;color:var(--muted);margin-top:8px;text-align:center;"></div>
+    </div>
+
+    <!-- Whisper settings -->
+    <div class="section">
+      <div class="section-title">Whisper</div>
+      <label>Model</label>
+      <select id="model-select">
+        <option value="tiny">Tiny — fastest</option>
+        <option value="base" selected>Base — balanced</option>
+        <option value="small">Small — better</option>
+        <option value="medium">Medium — accurate</option>
+        <option value="large">Large — best</option>
+      </select>
+      <label>Language</label>
+      <select id="lang-select">
+        <option value="auto">Auto detect</option>
+        <option value="sv">Swedish</option>
+        <option value="en">English</option>
+        <option value="de">German</option>
+        <option value="fr">French</option>
+        <option value="es">Spanish</option>
+        <option value="pt">Portuguese</option>
+        <option value="it">Italian</option>
+        <option value="ja">Japanese</option>
+        <option value="ko">Korean</option>
+        <option value="zh">Chinese</option>
+      </select>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="transcribe-btn" disabled onclick="transcribe()">
+          <span>🎙</span> Transcribe
+        </button>
+      </div>
+      <div class="progress-bar" id="progress-bar" style="display:none">
+        <div class="progress-fill pulsing" id="progress-fill" style="width:100%"></div>
+      </div>
+      <div class="status-text" id="status-text"></div>
+    </div>
+
+    <!-- Style presets -->
+    <div class="section">
+      <div class="section-title">Style Preset</div>
+      <div class="presets">
+        <div class="preset-chip active" onclick="applyPreset('tiktok')">TikTok</div>
+        <div class="preset-chip" onclick="applyPreset('viral')">Viral White</div>
+        <div class="preset-chip" onclick="applyPreset('neon')">Neon</div>
+        <div class="preset-chip" onclick="applyPreset('minimal')">Minimal</div>
+        <div class="preset-chip" onclick="applyPreset('fire')">Fire</div>
+        <div class="preset-chip" onclick="applyPreset('shadow')">Shadow</div>
+      </div>
+    </div>
+
+    <!-- Style settings -->
+    <div class="section">
+      <div class="section-title">Style</div>
+
+      <label>Font</label>
+      <select id="font-select" onchange="updatePreview()">
+        <option value="Arial Black">Arial Black</option>
+        <option value="Impact">Impact</option>
+        <option value="Arial Rounded MT Bold">Arial Rounded</option>
+        <option value="Helvetica Neue">Helvetica Neue</option>
+        <option value="Georgia">Georgia</option>
+      </select>
+
+      <label>Font Size: <span id="fontsize-val">52</span>px</label>
+      <input type="range" id="fontsize" min="20" max="120" value="52" oninput="document.getElementById('fontsize-val').textContent=this.value;updatePreview()">
+
+      <label>Words per chunk</label>
+      <select id="words-per-chunk" onchange="updatePreview()">
+        <option value="1">1 word</option>
+        <option value="2">2 words</option>
+        <option value="3" selected>3 words</option>
+        <option value="4">4 words</option>
+        <option value="5">5 words</option>
+      </select>
+
+      <label>Text Color</label>
+      <div class="color-row">
+        <input type="color" id="text-color" value="#ffffff" onchange="updatePreview()">
+        <span>Main text</span>
+      </div>
+
+      <label>Highlight Color</label>
+      <div class="color-row">
+        <input type="color" id="highlight-color" value="#FEE800" onchange="updatePreview()">
+        <span>Active word</span>
+      </div>
+
+      <label>Outline Color</label>
+      <div class="color-row">
+        <input type="color" id="outline-color" value="#000000" onchange="updatePreview()">
+        <span>Stroke</span>
+      </div>
+
+      <label>Outline Width: <span id="outline-val">4</span>px</label>
+      <input type="range" id="outline-width" min="0" max="12" value="4" oninput="document.getElementById('outline-val').textContent=this.value;updatePreview()">
+
+      <label>Position: <span id="pos-val">85</span>%</label>
+      <input type="range" id="position" min="10" max="98" value="85" oninput="document.getElementById('pos-val').textContent=this.value;updatePreview()">
+
+      <div class="toggle-row">
+        <span class="toggle-label">Uppercase</span>
+        <div class="toggle on" id="uppercase-toggle" onclick="this.classList.toggle('on');updatePreview()"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Word highlight</span>
+        <div class="toggle on" id="highlight-toggle" onclick="this.classList.toggle('on');updatePreview()"></div>
+      </div>
+    </div>
+
+    <!-- Emoji Reactions -->
+    <div class="section">
+      <div class="section-title">Emoji Reactions</div>
+      <button type="button" class="btn btn-secondary emoji-autodetect-btn" onclick="autoDetectEmojis()">✨ Auto-detect</button>
+      <label for="emoji-position">Position</label>
+      <select id="emoji-position" title="Emoji position relative to subtitle" onchange="updatePreview()">
+        <option value="above">Above subtitle</option>
+        <option value="below" selected>Below subtitle</option>
+        <option value="right">Right of subtitle</option>
+      </select>
+      <label for="emoji-size">Size: <span id="emoji-size-val">48</span>px</label>
+      <input type="range" id="emoji-size" title="Emoji size in pixels" min="20" max="120" value="48" oninput="document.getElementById('emoji-size-val').textContent=this.value;updatePreview()">
+      <div class="toggle-row emoji-toggle-row">
+        <span class="toggle-label">Show emojis</span>
+        <div class="toggle on" id="emoji-toggle" onclick="this.classList.toggle('on');updatePreview()"></div>
+      </div>
+    </div>
+
+    <!-- GIF Reactions -->
+    <div class="section">
+      <div class="section-title">GIF Reactions</div>
+      <label for="gif-assign-target" class="gif-assign-target">Assign to segment</label>
+      <select id="gif-assign-target" title="Target segment for GIF assignment"></select>
+      <div class="gif-search-row gif-search-section">
+        <input type="text" id="gif-search" placeholder="Search GIFs…" title="Search GIFs" onkeydown="if(event.key==='Enter')searchGifs()">
+        <button type="button" class="gif-search-btn" onclick="searchGifs()">🔍</button>
+      </div>
+      <div class="gif-results" id="gif-results"></div>
+      <label class="gif-position-label" for="gif-position">Position</label>
+      <select id="gif-position" title="GIF position on video" onchange="updateGifOverlay(document.getElementById('video-player').currentTime)">
+        <option value="top">Top</option>
+        <option value="center" selected>Center</option>
+        <option value="bottom">Bottom</option>
+      </select>
+      <label for="gif-size">Size: <span id="gif-size-val">50</span>%</label>
+      <input type="range" id="gif-size" title="GIF size as % of video width" min="10" max="100" value="50" oninput="document.getElementById('gif-size-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
+      <label for="gif-opacity">Opacity: <span id="gif-opacity-val">90</span>%</label>
+      <input type="range" id="gif-opacity" title="GIF opacity" min="10" max="100" value="90" oninput="document.getElementById('gif-opacity-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
+      <div class="toggle-row gif-show-toggle-row">
+        <span class="toggle-label">Show GIFs</span>
+        <div class="toggle on" id="gif-toggle" onclick="this.classList.toggle('on');updateGifOverlay(document.getElementById('video-player').currentTime)"></div>
+      </div>
+      <input type="text" id="giphy-key" class="giphy-key-input" placeholder="Giphy API key (optional)" title="Your Giphy API key">
+    </div>
+
+    <!-- Crop to Format -->
+    <div class="section">
+      <div class="section-title">Crop to Format</div>
+      <div class="crop-aspect-chips">
+        <div class="crop-chip active" onclick="setCropAspect('9:16',this)">9:16 TikTok</div>
+        <div class="crop-chip" onclick="setCropAspect('1:1',this)">1:1 Square</div>
+        <div class="crop-chip" onclick="setCropAspect('4:5',this)">4:5 Feed</div>
+        <div class="crop-chip" onclick="setCropAspect('16:9',this)">16:9 Wide</div>
+      </div>
+      <label for="crop-x">Horizontal: <span id="crop-x-val">50</span>%</label>
+      <input type="range" id="crop-x" title="Horizontal crop position" min="0" max="100" value="50" oninput="document.getElementById('crop-x-val').textContent=this.value;updateCropOverlay()">
+      <label for="crop-y">Vertical: <span id="crop-y-val">50</span>%</label>
+      <input type="range" id="crop-y" title="Vertical crop position" min="0" max="100" value="50" oninput="document.getElementById('crop-y-val').textContent=this.value;updateCropOverlay()">
+      <div class="toggle-row crop-toggle-row">
+        <span class="toggle-label">Preview crop</span>
+        <div class="toggle on" id="crop-preview-toggle" onclick="this.classList.toggle('on');toggleCropPreview()"></div>
+      </div>
+      <button type="button" class="btn btn-primary crop-export-btn" id="crop-export-btn" disabled onclick="exportCropped()">✂️ Export Cropped</button>
+    </div>
+
+    <!-- AI Highlights -->
+    <div class="section">
+      <div class="section-title">AI Highlights</div>
+      <label for="hl-target">Target length: <span id="hl-target-val">50</span>%</label>
+      <input type="range" id="hl-target" title="Target highlight duration as % of original" min="10" max="90" value="50" oninput="document.getElementById('hl-target-val').textContent=this.value">
+      <div class="hl-actions">
+        <button type="button" class="btn btn-secondary" id="hl-local-btn" disabled onclick="analyzeHighlights(false)">⚡ Analyze</button>
+        <button type="button" class="btn btn-primary" id="hl-export-btn" disabled onclick="exportHighlights()">🎬 Export Reel</button>
+      </div>
+      <div class="hl-stats" id="hl-stats"></div>
+      <div class="hl-divider"></div>
+      <label for="hl-claude-key">Anthropic API Key (optional)</label>
+      <div class="hl-claude-row">
+        <input type="password" id="hl-claude-key" title="Anthropic API key for Claude analysis" placeholder="sk-ant-…">
+        <button type="button" class="btn btn-secondary hl-claude-btn" id="hl-claude-btn" onclick="analyzeHighlights(true)">✨ Claude</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <div class="preview-area">
+
+      <!-- Video -->
+      <div class="video-panel" id="video-panel"
+        ondrop="handleDrop(event)" ondragover="event.preventDefault();document.getElementById('upload-zone').classList.add('drag')"
+        ondragleave="document.getElementById('upload-zone').classList.remove('drag')">
+        <div class="video-wrapper" id="video-wrapper">
+          <div class="video-placeholder" id="video-placeholder">
+            <div class="ph-icon">🎞</div>
+            <div>Upload a video to start</div>
+          </div>
+          <video id="video-player" style="display:none" controls></video>
+          <canvas id="sub-canvas" style="display:none"></canvas>
+          <div id="gif-overlay"></div>
+          <div class="crop-overlay" id="crop-overlay">
+            <div class="crop-window" id="crop-window">
+              <span class="crop-label" id="crop-label">9:16</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Segments -->
+      <div class="segments-panel">
+        <div class="segments-header">
+          <h3>Transcript <span id="lang-badge"></span></h3>
+          <span class="seg-count" id="seg-count">0 segments</span>
+        </div>
+        <div class="segments-list" id="segments-list">
+          <div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;">
+            Transcribe a video to see segments
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export bar -->
+    <div class="export-bar" id="export-bar">
+      <span style="font-size:12px;color:var(--muted);flex:1">Export</span>
+      <button class="btn btn-secondary" id="export-srt-btn" disabled onclick="exportSRT()">↓ SRT</button>
+      <button class="btn btn-secondary" id="export-ass-btn" disabled onclick="exportASS()">↓ ASS</button>
+      <button class="btn btn-primary" id="export-video-btn" disabled onclick="exportVideo()">🔥 Burn to Video</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let videoFile = null;
+let segments = [];
+let currentTime = 0;
+let animFrameId = null;
+let segmentEmojis = {};
+let emojiPickerTarget = null;
+let segmentGifs = {};
+let cropAspect = '9:16';
+let highlightScores = [];
+let highlightSelected = new Set();
+
+// ── File handling ──────────────────────────────────────────────
+document.getElementById('file-input').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) loadVideo(f);
+});
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('video/')) loadVideo(f);
+}
+
+function loadVideo(f) {
+  videoFile = f;
+  document.getElementById('file-name').textContent = f.name;
+  document.getElementById('transcribe-btn').disabled = false;
+  const url = URL.createObjectURL(f);
+  const vid = document.getElementById('video-player');
+  vid.src = url;
+  vid.style.display = 'block';
+  document.getElementById('video-placeholder').style.display = 'none';
+  document.getElementById('sub-canvas').style.display = 'block';
+  vid.addEventListener('loadedmetadata', () => resizeCanvas());
+  vid.addEventListener('timeupdate', () => {
+    renderSubtitles(vid.currentTime);
+    updateGifOverlay(vid.currentTime);
+  });
+  window.addEventListener('resize', () => { resizeCanvas(); updateCropOverlay(); });
+  document.getElementById('crop-export-btn').disabled = false;
+}
+
+function resizeCanvas() {
+  const vid = document.getElementById('video-player');
+  const canvas = document.getElementById('sub-canvas');
+  canvas.width = vid.videoWidth || vid.offsetWidth;
+  canvas.height = vid.videoHeight || vid.offsetHeight;
+  canvas.style.width = vid.offsetWidth + 'px';
+  canvas.style.height = vid.offsetHeight + 'px';
+}
+
+// ── Transcription ─────────────────────────────────────────────
+async function transcribe() {
+  if (!videoFile) return;
+  const btn = document.getElementById('transcribe-btn');
+  btn.disabled = true;
+  document.getElementById('progress-bar').style.display = 'block';
+  setStatus('Loading Whisper model & transcribing… (may take a minute)');
+
+  const fd = new FormData();
+  fd.append('file', videoFile);
+  fd.append('model', document.getElementById('model-select').value);
+  fd.append('language', document.getElementById('lang-select').value);
+
+  try {
+    const res = await fetch('/transcribe', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    segments = data.segments;
+    segmentEmojis = {};
+    segmentGifs = {};
+    highlightScores = [];
+    highlightSelected = new Set();
+    renderSegmentsList();
+    refreshGifTargetDropdown();
+    document.getElementById('hl-local-btn').disabled = false;
+    enableExports();
+    setStatus(`Done! Detected language: ${data.language}`);
+    showLangBadge(data.language);
+    document.getElementById('progress-bar').style.display = 'none';
+  } catch(err) {
+    setStatus('Error: ' + err.message);
+    document.getElementById('progress-bar').style.display = 'none';
+  }
+  btn.disabled = false;
+}
+
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+}
+
+function showLangBadge(lang) {
+  const el = document.getElementById('lang-badge');
+  el.innerHTML = `<span class="lang-badge">${lang}</span>`;
+}
+
+// ── Segments list ─────────────────────────────────────────────
+function renderSegmentsList() {
+  const list = document.getElementById('segments-list');
+  document.getElementById('seg-count').textContent = `${segments.length} segments`;
+  list.innerHTML = '';
+  segments.forEach((seg, i) => {
+    const card = document.createElement('div');
+    card.className = 'segment-card';
+    card.id = `seg-${i}`;
+    const ts = `${fmt(seg.start)} → ${fmt(seg.end)}`;
+    const wordsHtml = (seg.words || []).map(w =>
+      `<span class="seg-word" data-start="${w.start}" data-end="${w.end}">${w.word.trim()}</span>`
+    ).join('');
+    const emojis = segmentEmojis[i] || [];
+    const emojiHtml = emojis.map(e =>
+      `<span class="seg-emoji-badge" onclick="event.stopPropagation();removeEmoji(${i},'${e}')" title="Click to remove">
+        ${e}<span class="remove-emoji">×</span>
+      </span>`
+    ).join('');
+    const gif = segmentGifs[i];
+    const gifHtml = gif
+      ? `<div class="seg-gif-badge"><img src="${gif.preview}" alt="GIF"><span style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${gif.title||'GIF'}</span><button type="button" class="gif-remove" onclick="event.stopPropagation();removeSegmentGif(${i})">×</button></div>`
+      : '';
+
+    const score = highlightScores[i];
+    const hasScores = highlightScores.length > 0;
+    const included = highlightSelected.has(i);
+    const barColor = included ? '#22c55e' : '#6b7280';
+    const scorePct = hasScores ? Math.round(score * 100) : 0;
+    const scoreHtml = hasScores ? `
+      <div class="seg-score-row" onclick="event.stopPropagation()">
+        <div class="seg-include-toggle ${included ? 'included' : ''}" onclick="toggleHighlightSegment(${i})" title="Toggle include in highlight reel"></div>
+        <div class="seg-score-bar-bg" onclick="toggleHighlightSegment(${i})">
+          <div class="seg-score-bar-fill" style="width:${scorePct}%;background:${barColor}"></div>
+        </div>
+        <span class="seg-score-pct">${scorePct}%</span>
+      </div>` : '';
+
+    card.innerHTML = `
+      <div class="seg-time">${ts}</div>
+      <div class="seg-text">${seg.text}</div>
+      <div class="seg-words">${wordsHtml}</div>
+      <div class="seg-emoji-row" id="emoji-row-${i}">
+        ${emojiHtml}
+        <button type="button" class="add-emoji-btn" onclick="event.stopPropagation();openEmojiPicker(${i},this)" title="Add emoji reaction">+ 😀</button>
+      </div>
+      <div id="gif-badge-${i}">${gifHtml}</div>
+      ${scoreHtml}`;
+    if (hasScores) card.classList.toggle('hl-excluded', !included);
+    card.onclick = () => {
+      document.getElementById('video-player').currentTime = seg.start;
+    };
+    list.appendChild(card);
+  });
+}
+
+function fmt(s) {
+  const m = Math.floor(s/60), sec = (s%60).toFixed(1).padStart(4,'0');
+  return `${m}:${sec}`;
+}
+
+// ── Subtitle rendering on canvas ──────────────────────────────
+function getStyle() {
+  return {
+    font: document.getElementById('font-select').value,
+    fontSize: parseInt(document.getElementById('fontsize').value),
+    textColor: document.getElementById('text-color').value,
+    highlightColor: document.getElementById('highlight-color').value,
+    outlineColor: document.getElementById('outline-color').value,
+    outlineWidth: parseInt(document.getElementById('outline-width').value),
+    position: parseInt(document.getElementById('position').value) / 100,
+    uppercase: document.getElementById('uppercase-toggle').classList.contains('on'),
+    highlightEnabled: document.getElementById('highlight-toggle').classList.contains('on'),
+    wordsPerChunk: parseInt(document.getElementById('words-per-chunk').value),
+  };
+}
+
+function renderSubtitles(time) {
+  const canvas = document.getElementById('sub-canvas');
+  const ctx = canvas.getContext('2d');
+  const vid = document.getElementById('video-player');
+  if (!canvas.width) resizeCanvas();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!segments.length) return;
+
+  const s = getStyle();
+  const wpc = s.wordsPerChunk;
+
+  // Collect all word-chunks
+  const chunks = [];
+  for (const seg of segments) {
+    const words = seg.words || [];
+    if (!words.length) {
+      chunks.push({ words: [{ word: seg.text, start: seg.start, end: seg.end }], start: seg.start, end: seg.end });
+      continue;
+    }
+    for (let i = 0; i < words.length; i += wpc) {
+      const chunk = words.slice(i, i + wpc);
+      chunks.push({ words: chunk, start: chunk[0].start, end: chunk[chunk.length-1].end });
+    }
+  }
+
+  const active = chunks.find(c => time >= c.start && time <= c.end + 0.05);
+  if (!active) {
+    updateActiveSegment(time);
+    return;
+  }
+
+  const scaleFactor = canvas.width / (vid.videoWidth || canvas.width);
+  const fontSize = Math.round(s.fontSize * scaleFactor * (canvas.width / 1080));
+  ctx.font = `900 ${fontSize}px "${s.font}"`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+
+  const y = canvas.height * s.position;
+  const cx = canvas.width / 2;
+
+  if (s.highlightEnabled) {
+    // Render word by word with highlight
+    const wordTexts = active.words.map(w => s.uppercase ? w.word.toUpperCase() : w.word);
+    const fullText = wordTexts.join(' ');
+    const totalW = ctx.measureText(fullText).width;
+    let x = cx - totalW / 2;
+
+    active.words.forEach((w, idx) => {
+      const txt = s.uppercase ? w.word.toUpperCase() : w.word;
+      const isActive = time >= w.start && time <= w.end + 0.05;
+      const wordW = ctx.measureText(txt).width;
+      const spaceW = idx < active.words.length - 1 ? ctx.measureText(' ').width : 0;
+      const wordCx = x + wordW / 2;
+
+      ctx.lineWidth = s.outlineWidth * scaleFactor;
+      ctx.strokeStyle = s.outlineColor;
+      ctx.strokeText(txt, wordCx, y);
+      ctx.fillStyle = isActive ? s.highlightColor : s.textColor;
+      ctx.fillText(txt, wordCx, y);
+      x += wordW + spaceW;
+    });
+  } else {
+    const txt = s.uppercase
+      ? active.words.map(w => w.word).join(' ').toUpperCase()
+      : active.words.map(w => w.word).join(' ');
+    ctx.lineWidth = s.outlineWidth * scaleFactor;
+    ctx.strokeStyle = s.outlineColor;
+    ctx.strokeText(txt, cx, y);
+    ctx.fillStyle = s.textColor;
+    ctx.fillText(txt, cx, y);
+  }
+
+  // Emoji overlay
+  const emojiOn = document.getElementById('emoji-toggle').classList.contains('on');
+  if (emojiOn) {
+    const activeSeg = segments.findIndex(sg => time >= sg.start && time <= sg.end + 0.05);
+    const emojis = activeSeg >= 0 ? (segmentEmojis[activeSeg] || []) : [];
+    if (emojis.length) {
+      const emojiPx = parseInt(document.getElementById('emoji-size').value);
+      const emojiSize = Math.round(emojiPx * scaleFactor * (canvas.width / 1080));
+      const pos = document.getElementById('emoji-position').value;
+      ctx.font = `${emojiSize}px serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      const totalW = emojis.length * (emojiSize * 1.2);
+      let ex = cx - totalW / 2 + emojiSize * 0.6;
+      let ey;
+      if (pos === 'above') ey = y - fontSize - emojiSize * 0.6;
+      else if (pos === 'below') ey = y + emojiSize * 0.8;
+      else { ex = cx + ctx.measureText(active.words.map(w=>w.word).join(' ')).width / 2 + emojiSize; ey = y - fontSize / 2; }
+      emojis.forEach(e => { ctx.fillText(e, ex, ey); ex += emojiSize * 1.2; });
+    }
+  }
+
+  updateActiveSegment(time);
+}
+
+function updateActiveSegment(time) {
+  const idx = segments.findIndex(s => time >= s.start && time <= s.end + 0.1);
+  document.querySelectorAll('.segment-card').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+  if (idx >= 0) {
+    const el = document.getElementById(`seg-${idx}`);
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+
+    // highlight individual words
+    document.querySelectorAll(`#seg-${idx} .seg-word`).forEach(w => {
+      const ws = parseFloat(w.dataset.start);
+      const we = parseFloat(w.dataset.end);
+      w.classList.toggle('highlight', time >= ws && time <= we + 0.05);
+    });
+  }
+}
+
+function updatePreview() {
+  const vid = document.getElementById('video-player');
+  if (vid.style.display !== 'none') renderSubtitles(vid.currentTime);
+}
+
+// ── Presets ───────────────────────────────────────────────────
+const PRESETS = {
+  tiktok:  { font: 'Arial Black', fontSize: 52, textColor: '#ffffff', highlightColor: '#FEE800', outlineColor: '#000000', outlineWidth: 4, position: 85, uppercase: true },
+  viral:   { font: 'Impact',      fontSize: 60, textColor: '#ffffff', highlightColor: '#ff3b5c', outlineColor: '#000000', outlineWidth: 5, position: 80, uppercase: true },
+  neon:    { font: 'Arial Black', fontSize: 48, textColor: '#25f4ee', highlightColor: '#fe2c55', outlineColor: '#000000', outlineWidth: 3, position: 85, uppercase: false },
+  minimal: { font: 'Helvetica Neue', fontSize: 44, textColor: '#ffffff', highlightColor: '#ffffff', outlineColor: '#000000', outlineWidth: 2, position: 90, uppercase: false },
+  fire:    { font: 'Impact',      fontSize: 58, textColor: '#ff6600', highlightColor: '#ffcc00', outlineColor: '#000000', outlineWidth: 6, position: 82, uppercase: true },
+  shadow:  { font: 'Arial Rounded MT Bold', fontSize: 50, textColor: '#ffffff', highlightColor: '#c0ff00', outlineColor: '#1a1a1a', outlineWidth: 5, position: 87, uppercase: false },
+};
+
+function applyPreset(name) {
+  document.querySelectorAll('.preset-chip').forEach(c => c.classList.toggle('active', c.textContent.toLowerCase().replace(' ','') === name));
+  const p = PRESETS[name];
+  if (!p) return;
+  document.getElementById('font-select').value = p.font;
+  document.getElementById('fontsize').value = p.fontSize;
+  document.getElementById('fontsize-val').textContent = p.fontSize;
+  document.getElementById('text-color').value = p.textColor;
+  document.getElementById('highlight-color').value = p.highlightColor;
+  document.getElementById('outline-color').value = p.outlineColor;
+  document.getElementById('outline-width').value = p.outlineWidth;
+  document.getElementById('outline-val').textContent = p.outlineWidth;
+  document.getElementById('position').value = Math.round(p.position);
+  document.getElementById('pos-val').textContent = Math.round(p.position);
+  if (p.uppercase) document.getElementById('uppercase-toggle').classList.add('on');
+  else document.getElementById('uppercase-toggle').classList.remove('on');
+  updatePreview();
+}
+
+// ── Export ────────────────────────────────────────────────────
+function enableExports() {
+  ['export-srt-btn','export-ass-btn','export-video-btn'].forEach(id => {
+    document.getElementById(id).disabled = false;
+  });
+}
+
+function getAssStyle() {
+  const s = getStyle();
+  const hexToAss = (hex, alpha = '00') => {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return `&H${alpha}${b.toString(16).padStart(2,'0').toUpperCase()}${g.toString(16).padStart(2,'0').toUpperCase()}${r.toString(16).padStart(2,'0').toUpperCase()}`;
+  };
+  return {
+    font: s.font,
+    fontsize: Math.round(s.fontSize * 0.6),
+    primary_color: hexToAss(s.textColor),
+    highlight_color: hexToAss(s.highlightColor),
+    outline_color: hexToAss(s.outlineColor),
+    bold: true,
+    outline: s.outlineWidth,
+    shadow: 0,
+    margin_v: Math.round((1 - s.position / 100) * 1920 * 0.15 + 40),
+  };
+}
+
+async function exportSRT() {
+  const res = await fetch('/export/srt', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ segments, words_per_chunk: document.getElementById('words-per-chunk').value })
+  });
+  downloadBlob(await res.blob(), 'subtitles.srt');
+}
+
+async function exportASS() {
+  const res = await fetch('/export/ass', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ segments, style: getAssStyle(), words_per_chunk: document.getElementById('words-per-chunk').value })
+  });
+  downloadBlob(await res.blob(), 'subtitles.ass');
+}
+
+async function exportVideo() {
+  if (!videoFile) return;
+  const btn = document.getElementById('export-video-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Burning…';
+  const fd = new FormData();
+  fd.append('file', videoFile);
+  fd.append('segments_json', JSON.stringify(segments));
+  fd.append('style_json', JSON.stringify(getAssStyle()));
+  fd.append('words_per_chunk', document.getElementById('words-per-chunk').value);
+  try {
+    const res = await fetch('/export/video', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await res.text());
+    downloadBlob(await res.blob(), 'output_with_subs.mp4');
+  } catch(e) {
+    alert('Export failed: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '🔥 Burn to Video';
+}
+
+function downloadBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+}
+
+// ── AI Highlights ─────────────────────────────────────────────
+async function analyzeHighlights(useClaude) {
+  if (!segments.length) return;
+  const btn = useClaude ? document.getElementById('hl-claude-btn') : document.getElementById('hl-local-btn');
+  const prevText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ Analyzing…';
+  document.getElementById('hl-stats').textContent = '';
+
+  const target_pct = parseInt(document.getElementById('hl-target').value) / 100;
+  const api_key = useClaude ? document.getElementById('hl-claude-key').value.trim() : '';
+
+  try {
+    const res = await fetch('/analyze_highlights', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ segments, target_pct, api_key }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    highlightScores = data.scores || [];
+    highlightSelected = new Set(data.selected || []);
+
+    if (data.warning) document.getElementById('hl-stats').textContent = '⚠️ ' + data.warning;
+
+    renderSegmentsList();
+    updateHlStats();
+    document.getElementById('hl-export-btn').disabled = !videoFile || !highlightSelected.size;
+  } catch (e) {
+    document.getElementById('hl-stats').textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = prevText;
+}
+
+function toggleHighlightSegment(idx) {
+  if (highlightSelected.has(idx)) highlightSelected.delete(idx);
+  else highlightSelected.add(idx);
+  // Update just this card's score row + class without full re-render
+  const card = document.getElementById(`seg-${idx}`);
+  if (!card) return;
+  const included = highlightSelected.has(idx);
+  card.classList.toggle('hl-excluded', !included);
+  const toggle = card.querySelector('.seg-include-toggle');
+  const fill = card.querySelector('.seg-score-bar-fill');
+  if (toggle) toggle.classList.toggle('included', included);
+  if (fill) fill.style.background = included ? '#22c55e' : '#6b7280';
+  updateHlStats();
+  document.getElementById('hl-export-btn').disabled = !videoFile || !highlightSelected.size;
+}
+
+function updateHlStats() {
+  const sel = [...highlightSelected];
+  if (!sel.length || !segments.length) { document.getElementById('hl-stats').textContent = ''; return; }
+  const dur = sel.reduce((sum, i) => sum + (segments[i].end - segments[i].start), 0);
+  const total = segments.reduce((sum, s) => sum + (s.end - s.start), 0);
+  const pct = Math.round(dur / total * 100);
+  document.getElementById('hl-stats').textContent =
+    `${sel.length} segments · ${fmt(dur)} of ${fmt(total)} (${pct}%)`;
+}
+
+async function exportHighlights() {
+  if (!videoFile || !highlightSelected.size) return;
+  const btn = document.getElementById('hl-export-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Cutting…';
+
+  const ranges = [...highlightSelected].sort((a,b)=>a-b).map(i => [segments[i].start, segments[i].end]);
+  const fd = new FormData();
+  fd.append('file', videoFile);
+  fd.append('ranges_json', JSON.stringify(ranges));
+  fd.append('padding', '0.15');
+
+  try {
+    const res = await fetch('/export/highlights', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await res.text());
+    downloadBlob(await res.blob(), 'highlights.mp4');
+  } catch (e) {
+    alert('Export failed: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '🎬 Export Reel';
+}
+
+// ── GIF reactions ─────────────────────────────────────────────
+function refreshGifTargetDropdown() {
+  const sel = document.getElementById('gif-assign-target');
+  sel.innerHTML = segments.map((s, i) =>
+    `<option value="${i}">[${fmt(s.start)}] ${s.text.slice(0,40)}</option>`
+  ).join('');
+}
+
+async function searchGifs() {
+  const q = document.getElementById('gif-search').value.trim();
+  if (!q) return;
+  const key = document.getElementById('giphy-key').value.trim();
+  const url = `/search_gifs?q=${encodeURIComponent(q)}${key ? '&api_key=' + encodeURIComponent(key) : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) { alert('GIF search failed'); return; }
+  const data = await res.json();
+  const grid = document.getElementById('gif-results');
+  grid.innerHTML = data.results.map((g, i) =>
+    `<div class="gif-thumb" data-idx="${i}" onclick="assignGif(${i})" title="${g.title}">
+      <img src="${g.preview}" alt="${g.title}" loading="lazy">
+    </div>`
+  ).join('');
+  grid._data = data.results;
+}
+
+function assignGif(thumbIdx) {
+  const grid = document.getElementById('gif-results');
+  const gif = grid._data[thumbIdx];
+  if (!gif) return;
+  const segIdx = parseInt(document.getElementById('gif-assign-target').value);
+  if (isNaN(segIdx)) return;
+  segmentGifs[segIdx] = gif;
+  document.querySelectorAll('.gif-thumb').forEach((el, i) => el.classList.toggle('selected', i === thumbIdx));
+  refreshGifBadge(segIdx);
+  updateGifOverlay(document.getElementById('video-player').currentTime);
+  document.getElementById('crop-export-btn').disabled = false;
+}
+
+function removeSegmentGif(segIdx) {
+  delete segmentGifs[segIdx];
+  refreshGifBadge(segIdx);
+  updateGifOverlay(document.getElementById('video-player').currentTime);
+}
+
+function refreshGifBadge(segIdx) {
+  const el = document.getElementById(`gif-badge-${segIdx}`);
+  if (!el) return;
+  const gif = segmentGifs[segIdx];
+  el.innerHTML = gif
+    ? `<div class="seg-gif-badge"><img src="${gif.preview}" alt="GIF"><span style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${gif.title||'GIF'}</span><button type="button" class="gif-remove" onclick="event.stopPropagation();removeSegmentGif(${segIdx})">×</button></div>`
+    : '';
+}
+
+function updateGifOverlay(time) {
+  const overlay = document.getElementById('gif-overlay');
+  const vid = document.getElementById('video-player');
+  if (!overlay || vid.style.display === 'none') return;
+
+  const enabled = document.getElementById('gif-toggle').classList.contains('on');
+  overlay.innerHTML = '';
+  if (!enabled) return;
+
+  const activeSeg = segments.findIndex(s => time >= s.start && time <= s.end + 0.05);
+  const gif = activeSeg >= 0 ? segmentGifs[activeSeg] : null;
+  if (!gif || !gif.mp4) return;
+
+  const sizePct = parseInt(document.getElementById('gif-size').value) / 100;
+  const opacity = parseInt(document.getElementById('gif-opacity').value) / 100;
+  const pos = document.getElementById('gif-position').value;
+  const vw = vid.offsetWidth, vh = vid.offsetHeight;
+  const gw = Math.round(vw * sizePct);
+  const gh = Math.round(gw * 0.75);
+
+  let top;
+  if (pos === 'top') top = 12;
+  else if (pos === 'bottom') top = vh - gh - 12;
+  else top = Math.round((vh - gh) / 2);
+
+  const item = document.createElement('div');
+  item.className = 'gif-overlay-item';
+  item.style.cssText = `width:${gw}px;height:${gh}px;top:${top}px;left:${Math.round((vw-gw)/2)}px;opacity:${opacity}`;
+  item.innerHTML = `<video autoplay loop muted playsinline src="${gif.mp4}"></video>`;
+  overlay.appendChild(item);
+}
+
+// ── Crop ──────────────────────────────────────────────────────
+function setCropAspect(aspect, el) {
+  cropAspect = aspect;
+  document.querySelectorAll('.crop-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  updateCropOverlay();
+  document.getElementById('crop-export-btn').disabled = !videoFile;
+}
+
+function updateCropOverlay() {
+  const vid = document.getElementById('video-player');
+  const overlay = document.getElementById('crop-overlay');
+  const win = document.getElementById('crop-window');
+  const lbl = document.getElementById('crop-label');
+  if (!vid || vid.style.display === 'none') return;
+
+  lbl.textContent = cropAspect;
+  const [aN, aD] = cropAspect.split(':').map(Number);
+  const targetRatio = aN / aD;
+  const srcRatio = vid.videoWidth / vid.videoHeight;
+  const dw = vid.offsetWidth, dh = vid.offsetHeight;
+
+  let cw, ch, cx, cy;
+  const offX = parseInt(document.getElementById('crop-x').value) / 100;
+  const offY = parseInt(document.getElementById('crop-y').value) / 100;
+
+  if (srcRatio > targetRatio) {
+    ch = dh;
+    cw = Math.round(dh * targetRatio);
+    cx = Math.round((dw - cw) * offX);
+    cy = 0;
+  } else {
+    cw = dw;
+    ch = Math.round(dw / targetRatio);
+    cx = 0;
+    cy = Math.round((dh - ch) * offY);
+  }
+
+  win.style.cssText = `left:${cx}px;top:${cy}px;width:${cw}px;height:${ch}px`;
+}
+
+function toggleCropPreview() {
+  const overlay = document.getElementById('crop-overlay');
+  const on = document.getElementById('crop-preview-toggle').classList.contains('on');
+  overlay.style.display = on ? 'block' : 'none';
+  if (on) updateCropOverlay();
+}
+
+async function exportCropped() {
+  if (!videoFile) return;
+  const btn = document.getElementById('crop-export-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Cropping…';
+  const fd = new FormData();
+  fd.append('file', videoFile);
+  fd.append('aspect', cropAspect);
+  fd.append('offset_x', parseInt(document.getElementById('crop-x').value) / 100);
+  fd.append('offset_y', parseInt(document.getElementById('crop-y').value) / 100);
+  try {
+    const res = await fetch('/crop', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await res.text());
+    downloadBlob(await res.blob(), `cropped_${cropAspect.replace(':','x')}.mp4`);
+  } catch(e) {
+    alert('Crop failed: ' + e.message);
+  }
+  btn.disabled = false;
+  btn.textContent = '✂️ Export Cropped';
+}
+
+// ── Emoji reactions ───────────────────────────────────────────
+const EMOJI_CATEGORIES = {
+  'Reactions': ['😂','🤣','😭','😱','🤯','😍','🥰','😎','🤔','😤','😡','🥺','😢','🤩','😏'],
+  'Hype':      ['🔥','💯','⚡','💥','🎉','🎊','✨','💪','👏','🙌','🤙','👍','💃','🕺'],
+  'Symbols':   ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','‼️','⁉️','🆘','✅','❌'],
+  'Nature':    ['😈','👻','💀','🤖','👽','🎭','🎬','🎵','🎶','🌟','⭐','🌈','🌊','🍿'],
+};
+
+const EMOJI_KEYWORDS = [
+  { words: ['haha','lol','funny','skratt','rolig','😂','😄'], emojis: ['😂','🤣'] },
+  { words: ['wow','omg','crazy','galen','vansinnig','shock'], emojis: ['😱','🤯'] },
+  { words: ['love','kärlek','älskar','hjärta','heart'],       emojis: ['❤️','😍'] },
+  { words: ['fire','bäst','best','amazing','grym','🔥'],      emojis: ['🔥','💯'] },
+  { words: ['sad','ledsen','sorglig','cry','gråter'],          emojis: ['😢','😭'] },
+  { words: ['angry','arg','förbannad','mad','rage'],           emojis: ['😡','😤'] },
+  { words: ['cool','nice','snygg','awesome','dope'],           emojis: ['😎','✨'] },
+  { words: ['yes','ja','perfect','perfekt','exakt'],           emojis: ['✅','👍'] },
+  { words: ['no','nej','wrong','fel','never','aldrig'],        emojis: ['❌','🙅'] },
+  { words: ['party','fest','celebrate','fira','wins','vinner'],emojis: ['🎉','🥳'] },
+  { words: ['music','musik','dance','dansa','beat','låt'],     emojis: ['🎵','💃'] },
+  { words: ['food','mat','eat','äter','hungry','hungrig'],     emojis: ['🍕','😋'] },
+  { words: ['run','spring','fast','snabb','speed'],            emojis: ['⚡','💨'] },
+  { words: ['think','tänk','hmm','maybe','kanske'],            emojis: ['🤔','💭'] },
+];
+
+function autoDetectEmojis() {
+  if (!segments.length) return;
+  segments.forEach((seg, i) => {
+    const text = seg.text.toLowerCase();
+    const found = new Set(segmentEmojis[i] || []);
+    for (const rule of EMOJI_KEYWORDS) {
+      if (rule.words.some(w => text.includes(w))) {
+        rule.emojis.forEach(e => found.add(e));
+      }
+    }
+    if (found.size) segmentEmojis[i] = [...found];
+  });
+  renderSegmentsList();
+  updatePreview();
+}
+
+function openEmojiPicker(segIdx, anchorEl) {
+  closeEmojiPicker();
+  emojiPickerTarget = segIdx;
+
+  const picker = document.createElement('div');
+  picker.className = 'emoji-picker';
+  picker.id = 'emoji-picker';
+
+  const current = segmentEmojis[segIdx] || [];
+  let html = `<div class="emoji-picker-header">
+    <span class="emoji-picker-title">Add reaction</span>
+    <button type="button" class="emoji-picker-close" onclick="closeEmojiPicker()">×</button>
+  </div>`;
+
+  for (const [cat, emojis] of Object.entries(EMOJI_CATEGORIES)) {
+    html += `<div class="emoji-category">${cat}</div><div class="emoji-grid">`;
+    html += emojis.map(e =>
+      `<span class="emoji-opt${current.includes(e) ? ' selected' : ''}" onclick="toggleEmoji(${segIdx},'${e}',this)" title="${e}">${e}</span>`
+    ).join('');
+    html += '</div>';
+  }
+  picker.innerHTML = html;
+  document.body.appendChild(picker);
+
+  const rect = anchorEl.getBoundingClientRect();
+  picker.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - picker.offsetHeight - 10)}px`;
+  picker.style.left = `${Math.min(rect.left, window.innerWidth - 290)}px`;
+
+  setTimeout(() => document.addEventListener('click', outsidePickerClick), 0);
+}
+
+function outsidePickerClick(e) {
+  const picker = document.getElementById('emoji-picker');
+  if (picker && !picker.contains(e.target)) closeEmojiPicker();
+}
+
+function closeEmojiPicker() {
+  document.getElementById('emoji-picker')?.remove();
+  document.removeEventListener('click', outsidePickerClick);
+  emojiPickerTarget = null;
+}
+
+function toggleEmoji(segIdx, emoji, el) {
+  const arr = segmentEmojis[segIdx] || [];
+  const idx = arr.indexOf(emoji);
+  if (idx >= 0) { arr.splice(idx, 1); el.classList.remove('selected'); }
+  else { arr.push(emoji); el.classList.add('selected'); }
+  segmentEmojis[segIdx] = arr;
+  refreshEmojiRow(segIdx);
+  updatePreview();
+}
+
+function removeEmoji(segIdx, emoji) {
+  const arr = segmentEmojis[segIdx] || [];
+  segmentEmojis[segIdx] = arr.filter(e => e !== emoji);
+  refreshEmojiRow(segIdx);
+  updatePreview();
+}
+
+function refreshEmojiRow(segIdx) {
+  const row = document.getElementById(`emoji-row-${segIdx}`);
+  if (!row) return;
+  const emojis = segmentEmojis[segIdx] || [];
+  const badges = emojis.map(e =>
+    `<span class="seg-emoji-badge" onclick="event.stopPropagation();removeEmoji(${segIdx},'${e}')" title="Click to remove">
+      ${e}<span class="remove-emoji">×</span>
+    </span>`
+  ).join('');
+  row.innerHTML = badges +
+    `<button type="button" class="add-emoji-btn" onclick="event.stopPropagation();openEmojiPicker(${segIdx},this)" title="Add emoji reaction">+ 😀</button>`;
+}
+</script>
+</body>
+</html>
