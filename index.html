@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SubTok — TikTok Subtitles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Bebas+Neue&family=Boogaloo&family=Cabin+Sketch:wght@700&family=Cinzel:wght@900&family=Fredoka+One&family=Lilita+One&family=Lobster&family=Montserrat:wght@900&family=Oswald:wght@700&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:ital,wght@0,900;1,900&family=Press+Start+2P&family=Righteous&family=Russo+One&family=Teko:wght@700&family=Titan+One&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0a0a0f;
@@ -428,11 +431,42 @@
 
       <label>Font</label>
       <select id="font-select" onchange="updatePreview()">
-        <option value="Arial Black">Arial Black</option>
-        <option value="Impact">Impact</option>
-        <option value="Arial Rounded MT Bold">Arial Rounded</option>
-        <option value="Helvetica Neue">Helvetica Neue</option>
-        <option value="Georgia">Georgia</option>
+        <optgroup label="── Hype / TikTok ──">
+          <option value="Arial Black">Arial Black</option>
+          <option value="Impact">Impact</option>
+          <option value="Anton">Anton</option>
+          <option value="Bebas Neue">Bebas Neue</option>
+          <option value="Bangers">Bangers</option>
+          <option value="Lilita One">Lilita One</option>
+          <option value="Titan One">Titan One</option>
+        </optgroup>
+        <optgroup label="── Kondenserad ──">
+          <option value="Oswald">Oswald</option>
+          <option value="Teko">Teko</option>
+          <option value="Montserrat">Montserrat</option>
+          <option value="Russo One">Russo One</option>
+        </optgroup>
+        <optgroup label="── Lekfull / Rund ──">
+          <option value="Fredoka One">Fredoka One</option>
+          <option value="Righteous">Righteous</option>
+          <option value="Boogaloo">Boogaloo</option>
+          <option value="Arial Rounded MT Bold">Arial Rounded</option>
+        </optgroup>
+        <optgroup label="── Skript / Handstil ──">
+          <option value="Pacifico">Pacifico</option>
+          <option value="Lobster">Lobster</option>
+          <option value="Permanent Marker">Permanent Marker</option>
+          <option value="Cabin Sketch">Cabin Sketch</option>
+        </optgroup>
+        <optgroup label="── Elegant / Serif ──">
+          <option value="Playfair Display">Playfair Display</option>
+          <option value="Cinzel">Cinzel</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Helvetica Neue">Helvetica Neue</option>
+        </optgroup>
+        <optgroup label="── Special ──">
+          <option value="Press Start 2P">Press Start 2P</option>
+        </optgroup>
       </select>
 
       <label>Font Size: <span id="fontsize-val">52</span>px</label>
@@ -654,6 +688,14 @@ let tlOffset = 0;          // seconds at left edge
 let tlDrag = null;         // active drag: { type, segIdx, startX, origStart, origEnd }
 let tlHoverSeg = -1;
 let tlRafId = null;
+
+// Apply each font to its own <option> so the dropdown previews them visually
+document.fonts.ready.then(() => {
+  document.querySelectorAll('#font-select option[value]').forEach(opt => {
+    const f = opt.value;
+    if (f) opt.style.fontFamily = `"${f}", sans-serif`;
+  });
+});
 
 // ── File handling ──────────────────────────────────────────────
 document.getElementById('file-input').addEventListener('change', e => {
@@ -1595,6 +1637,8 @@ function tlTotalDuration() {
   return 60;
 }
 
+let tlDragCanvasRect = null;
+
 function initTimeline() {
   const bar = document.getElementById('timeline-bar');
   const canvas = document.getElementById('timeline-canvas');
@@ -1602,7 +1646,6 @@ function initTimeline() {
   canvas.height = bar.clientHeight - 28;
   canvas.onmousedown = tlMouseDown;
   canvas.onmousemove = tlMouseMove;
-  canvas.onmouseup = tlMouseUp;
   canvas.onmouseleave = tlMouseLeave;
   canvas.addEventListener('wheel', tlWheel, { passive: false });
   fitTimeline();
@@ -1699,29 +1742,73 @@ function drawTimeline() {
   // ── Subtitle blocks ──
   ctx.fillStyle = '#111118';
   ctx.fillRect(0, SUBS_Y - 3, W, 3);
-  ctx.fillStyle = '#0c0c14';
+  ctx.fillStyle = '#0a0a12';
   ctx.fillRect(0, SUBS_Y, W, SUBS_H);
 
   segments.forEach((seg, i) => {
     const x1 = tlX(seg.start), x2 = tlX(seg.end);
-    if (x2 < -1 || x1 > W + 1) return;
-    const bx = Math.max(0, x1), bx2 = Math.min(W, x2), bw = bx2 - bx;
-    if (bw <= 0) return;
+    if (x2 < -20 || x1 > W + 20) return;
+    const bw = x2 - x1;
+    if (bw < 1) return;
+
     const isDragging = tlDrag?.segIdx === i;
     const isHovered = tlHoverSeg === i;
-    ctx.fillStyle = isDragging ? '#fe2c55dd' : isHovered ? '#fe2c55bb' : '#fe2c5580';
-    tlRoundRect(ctx, bx, SUBS_Y + 1, bw, SUBS_H - 2, 3);
-    ctx.fill();
-    const hw = Math.min(6, bw / 3);
-    if (x1 >= 0 && bw > 8) { ctx.fillStyle = '#0007'; tlRoundRect(ctx, bx, SUBS_Y + 1, hw, SUBS_H - 2, 3); ctx.fill(); }
-    if (x2 <= W && bw > 8) { ctx.fillStyle = '#0007'; tlRoundRect(ctx, bx2 - hw, SUBS_Y + 1, hw, SUBS_H - 2, 3); ctx.fill(); }
-    if (bw > 18) {
+    const isDragStart = isDragging && tlDrag.type === 'resize-start';
+    const isDragEnd   = isDragging && tlDrag.type === 'resize-end';
+    const isDragMove  = isDragging && tlDrag.type === 'move';
+
+    const y1 = SUBS_Y + 3, y2 = SUBS_Y + SUBS_H - 3, midY = SUBS_Y + SUBS_H / 2;
+    const vx1 = Math.max(0, x1), vx2 = Math.min(W, x2);
+
+    // Subtle background
+    ctx.fillStyle = isDragging ? 'rgba(254,44,85,.14)' : isHovered ? 'rgba(254,44,85,.09)' : 'rgba(254,44,85,.05)';
+    ctx.fillRect(vx1, y1, vx2 - vx1, y2 - y1);
+
+    // Top + bottom lines (only visible portion)
+    ctx.strokeStyle = isDragMove ? '#25f4ee' : isHovered ? '#ff607a' : '#fe2c55';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(vx1, y1); ctx.lineTo(vx2, y1);
+    ctx.moveTo(vx1, y2); ctx.lineTo(vx2, y2);
+    ctx.stroke();
+
+    // Left edge + arrow
+    if (x1 >= -1 && x1 <= W + 1) {
+      ctx.strokeStyle = isDragStart ? '#25f4ee' : isHovered ? '#ff607a' : '#fe2c55';
+      ctx.lineWidth = isDragStart ? 2.5 : 1.5;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x1, y2); ctx.stroke();
+      if (bw > 22) {
+        ctx.fillStyle = isDragStart ? '#25f4ee' : '#fe2c55';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText('◀', x1 + 3, midY);
+      }
+    }
+
+    // Right edge + arrow
+    if (x2 >= -1 && x2 <= W + 1) {
+      ctx.strokeStyle = isDragEnd ? '#25f4ee' : isHovered ? '#ff607a' : '#fe2c55';
+      ctx.lineWidth = isDragEnd ? 2.5 : 1.5;
+      ctx.beginPath(); ctx.moveTo(x2, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      if (bw > 22) {
+        ctx.fillStyle = isDragEnd ? '#25f4ee' : '#fe2c55';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText('▶', x2 - 3, midY);
+      }
+    }
+
+    // Text label
+    if (bw > 42) {
       ctx.save();
-      ctx.beginPath(); ctx.rect(bx + hw + 2, SUBS_Y, bw - hw * 2 - 4, SUBS_H); ctx.clip();
-      ctx.fillStyle = 'rgba(255,255,255,.88)';
-      ctx.font = '10px Inter, sans-serif';
-      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(seg.text, bx + hw + 4, SUBS_Y + SUBS_H / 2);
+      const tx = Math.max(0, x1) + 16, tw = Math.min(W, x2) - tx - 16;
+      if (tw > 8) {
+        ctx.beginPath(); ctx.rect(tx, y1, tw, y2 - y1); ctx.clip();
+        ctx.fillStyle = isDragging ? 'rgba(37,244,238,.9)' : 'rgba(255,255,255,.75)';
+        ctx.font = '10px Inter, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(seg.text, tx + tw / 2, midY);
+      }
       ctx.restore();
     }
   });
@@ -1764,16 +1851,64 @@ function tlFmtTime(s) {
 }
 
 function tlGetHit(x) {
-  const { SUBS_Y, SUBS_H } = tlDims();
+  const HW = 10; // hit-width for edges in px
   for (let i = segments.length - 1; i >= 0; i--) {
     const x1 = tlX(segments[i].start), x2 = tlX(segments[i].end);
-    const hw = Math.min(8, Math.max(4, (x2 - x1) / 4));
+    const hw = Math.min(HW, Math.max(4, (x2 - x1) / 4));
     if (x < x1 - 2 || x > x2 + 2) continue;
     if (x <= x1 + hw) return { type: 'resize-start', segIdx: i };
     if (x >= x2 - hw) return { type: 'resize-end', segIdx: i };
     return { type: 'move', segIdx: i };
   }
   return null;
+}
+
+// Sort segments by start to find neighbours for clamping
+function tlNeighbours(segIdx) {
+  const sorted = segments
+    .map((s, i) => ({ start: s.start, end: s.end, i }))
+    .sort((a, b) => a.start - b.start);
+  const pos = sorted.findIndex(s => s.i === segIdx);
+  return {
+    prevEnd:   pos > 0                  ? sorted[pos - 1].end   : 0,
+    nextStart: pos < sorted.length - 1  ? sorted[pos + 1].start : Infinity,
+  };
+}
+
+function tlApplyDrag(clientX) {
+  if (!tlDrag) return;
+  const x = clientX - tlDragCanvasRect.left;
+  const dt = (x - tlDrag.startX) / tlZoom;
+  const seg = segments[tlDrag.segIdx];
+  const MIN = 0.05;
+  const { prevEnd, nextStart } = tlNeighbours(tlDrag.segIdx);
+
+  if (tlDrag.type === 'move') {
+    const dur = tlDrag.origEnd - tlDrag.origStart;
+    const ns = Math.max(prevEnd, Math.min(nextStart - dur, tlDrag.origStart + dt));
+    seg.start = Math.round(ns * 1000) / 1000;
+    seg.end   = Math.round((ns + dur) * 1000) / 1000;
+  } else if (tlDrag.type === 'resize-start') {
+    seg.start = Math.round(Math.max(prevEnd, Math.min(tlDrag.origEnd - MIN, tlDrag.origStart + dt)) * 1000) / 1000;
+  } else {
+    seg.end = Math.round(Math.min(nextStart, Math.max(tlDrag.origStart + MIN, tlDrag.origEnd + dt)) * 1000) / 1000;
+  }
+
+  seg.words = distributeWords(seg.text, seg.start, seg.end);
+  updateTimeInputs(tlDrag.segIdx);
+  updatePreview();
+  drawTimeline();
+}
+
+function tlDocMove(e) { tlApplyDrag(e.clientX); }
+
+function tlDocUp() {
+  document.removeEventListener('mousemove', tlDocMove);
+  document.removeEventListener('mouseup', tlDocUp);
+  if (tlDrag) { renderSegmentsList(); tlDrag = null; }
+  const canvas = document.getElementById('timeline-canvas');
+  if (canvas) canvas.style.cursor = 'crosshair';
+  drawTimeline();
 }
 
 function tlMouseDown(e) {
@@ -1791,33 +1926,19 @@ function tlMouseDown(e) {
     if (vid.style.display !== 'none') vid.currentTime = Math.max(0, tlT(x));
     return;
   }
-  tlDrag = { type: hit.type, segIdx: hit.segIdx, startX: x, origStart: segments[hit.segIdx].start, origEnd: segments[hit.segIdx].end };
+  tlDrag = { type: hit.type, segIdx: hit.segIdx, startX: x,
+    origStart: segments[hit.segIdx].start, origEnd: segments[hit.segIdx].end };
+  tlDragCanvasRect = e.currentTarget.getBoundingClientRect();
+  document.addEventListener('mousemove', tlDocMove);
+  document.addEventListener('mouseup', tlDocUp);
   e.currentTarget.style.cursor = hit.type === 'move' ? 'grabbing' : 'ew-resize';
   e.preventDefault();
 }
 
 function tlMouseMove(e) {
+  if (tlDrag) return; // handled by document listener
   const x = e.offsetX, y = e.offsetY;
   const { SUBS_Y, SUBS_H } = tlDims();
-  if (tlDrag) {
-    const dt = (x - tlDrag.startX) / tlZoom;
-    const seg = segments[tlDrag.segIdx];
-    const MIN = 0.05;
-    if (tlDrag.type === 'move') {
-      const dur = tlDrag.origEnd - tlDrag.origStart;
-      seg.start = Math.round(Math.max(0, tlDrag.origStart + dt) * 1000) / 1000;
-      seg.end = Math.round((seg.start + dur) * 1000) / 1000;
-    } else if (tlDrag.type === 'resize-start') {
-      seg.start = Math.round(Math.min(tlDrag.origEnd - MIN, Math.max(0, tlDrag.origStart + dt)) * 1000) / 1000;
-    } else {
-      seg.end = Math.round(Math.max(tlDrag.origStart + MIN, tlDrag.origEnd + dt) * 1000) / 1000;
-    }
-    seg.words = distributeWords(seg.text, seg.start, seg.end);
-    updateTimeInputs(tlDrag.segIdx);
-    updatePreview();
-    drawTimeline();
-    return;
-  }
   if (y >= SUBS_Y && y <= SUBS_Y + SUBS_H) {
     const hit = tlGetHit(x);
     tlHoverSeg = hit ? hit.segIdx : -1;
@@ -1829,14 +1950,8 @@ function tlMouseMove(e) {
   drawTimeline();
 }
 
-function tlMouseUp() {
-  if (tlDrag) { renderSegmentsList(); tlDrag = null; }
-  const canvas = document.getElementById('timeline-canvas');
-  if (canvas) canvas.style.cursor = 'crosshair';
-}
-
 function tlMouseLeave() {
-  if (tlDrag) { renderSegmentsList(); tlDrag = null; }
+  if (tlDrag) return; // drag continues outside canvas via document listener
   tlHoverSeg = -1;
   drawTimeline();
 }

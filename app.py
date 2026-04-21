@@ -229,13 +229,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     ass_path.write_text(header + "\n".join(events))
 
+    # Run ffmpeg from OUTPUT_DIR so the ass= filter gets a plain filename
+    # (absolute paths with slashes confuse ffmpeg's filter graph parser on macOS)
     cmd = [
-        "ffmpeg", "-y", "-i", video_path,
-        "-vf", f"ass={ass_path.resolve()}",
+        "ffmpeg", "-y",
+        "-i", str(Path(video_path).resolve()),
+        "-vf", f"ass={ass_path.name}",
         "-c:a", "copy",
-        str(out_path)
+        str(out_path.resolve()),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(OUTPUT_DIR.resolve()))
     os.unlink(video_path)
 
     if result.returncode != 0:
