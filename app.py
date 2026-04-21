@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import subprocess
 import tempfile
@@ -95,7 +96,7 @@ async def export_srt(data: dict):
         for chunk in chunks:
             start = chunk[0]["start"]
             end = chunk[-1]["end"]
-            text = "".join(w["word"] for w in chunk).strip()
+            text = " ".join(w["word"].strip() for w in chunk).strip()
             lines.append(f"{idx}\n{_srt_time(start)} --> {_srt_time(end)}\n{text}\n")
             idx += 1
 
@@ -120,6 +121,9 @@ async def export_ass(data: dict):
     shadow = style.get("shadow", 0)
     margin_v = style.get("margin_v", 80)
     alignment = style.get("alignment", 2)  # bottom center
+    pos_x = round(1080 * float(style.get("pos_x_frac", 0.5)))
+    pos_y = round(1920 * float(style.get("pos_y_frac", 0.85)))
+    pos_tag = f"{{\\pos({pos_x},{pos_y})}}"
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -141,7 +145,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if not words:
             start = _ass_time(seg["start"])
             end = _ass_time(seg["end"])
-            events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{seg['text']}")
+            events.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{pos_tag}{seg['text']}")
             continue
 
         chunks = [words[i:i+words_per_chunk] for i in range(0, len(words), words_per_chunk)]
@@ -152,7 +156,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for w in chunk:
                 word_dur = int((w["end"] - w["start"]) * 100)
                 line_parts.append(f"{{\\k{word_dur}\\1c{highlight_color}}}{w['word'].strip()}{{\\1c{primary}}}")
-            text = " ".join(line_parts)
+            text = pos_tag + " ".join(line_parts)
             events.append(f"Dialogue: 0,{_ass_time(chunk_start)},{_ass_time(chunk_end)},Default,,0,0,0,,{text}")
 
     ass_path = OUTPUT_DIR / "subtitles.ass"
@@ -189,6 +193,9 @@ async def export_video(
     outline = style.get("outline", 3)
     shadow = style.get("shadow", 0)
     margin_v = style.get("margin_v", 80)
+    pos_x = round(1080 * float(style.get("pos_x_frac", 0.5)))
+    pos_y = round(1920 * float(style.get("pos_y_frac", 0.85)))
+    pos_tag = f"{{\\pos({pos_x},{pos_y})}}"
 
     header = f"""[Script Info]
 ScriptType: v4.00+
@@ -207,7 +214,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     for seg in segments:
         words = seg.get("words", [])
         if not words:
-            events.append(f"Dialogue: 0,{_ass_time(seg['start'])},{_ass_time(seg['end'])},Default,,0,0,0,,{seg['text']}")
+            events.append(f"Dialogue: 0,{_ass_time(seg['start'])},{_ass_time(seg['end'])},Default,,0,0,0,,{pos_tag}{seg['text']}")
             continue
         chunks = [words[i:i+words_per_chunk] for i in range(0, len(words), words_per_chunk)]
         for chunk in chunks:
@@ -217,14 +224,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             for w in chunk:
                 word_dur = int((w["end"] - w["start"]) * 100)
                 line_parts.append(f"{{\\k{word_dur}\\1c{highlight_color}}}{w['word'].strip()}{{\\1c{primary}}}")
-            text = " ".join(line_parts)
+            text = pos_tag + " ".join(line_parts)
             events.append(f"Dialogue: 0,{_ass_time(chunk_start)},{_ass_time(chunk_end)},Default,,0,0,0,,{text}")
 
     ass_path.write_text(header + "\n".join(events))
 
     cmd = [
         "ffmpeg", "-y", "-i", video_path,
-        "-vf", f"ass={ass_path}",
+        "-vf", f"ass={ass_path.resolve()}",
         "-c:a", "copy",
         str(out_path)
     ]
@@ -429,7 +436,6 @@ def _analyze_with_claude(segments: list, target_pct: float, api_key: str) -> dic
         }],
     )
 
-    import re
     match = re.search(r"\{.*\}", msg.content[0].text, re.DOTALL)
     if not match:
         raise ValueError("No JSON in response")
@@ -492,6 +498,111 @@ async def export_highlights(
         raise HTTPException(500, f"ffmpeg error: {result.stderr[-500:]}")
 
     return FileResponse(out_path, filename="highlights.mp4", media_type="video/mp4")
+
+
+def _srt_time_to_seconds(t: str) -> float:
+    t = t.replace(',', '.')
+    parts = t.split(':')
+    h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
+    return h * 3600 + m * 60 + s
+
+
+def _ass_time_to_seconds(t: str) -> float:
+    parts = t.strip().split(':')
+    h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
+    return h * 3600 + m * 60 + s
+
+
+def _distribute_words(text: str, start: float, end: float) -> list:
+    words = text.split()
+    if not words:
+        return []
+    dur = (end - start) / len(words)
+    return [
+        {"word": w, "start": round(start + i * dur, 3), "end": round(start + (i + 1) * dur, 3)}
+        for i, w in enumerate(words)
+    ]
+
+
+def _parse_srt(content: str) -> list:
+    segments = []
+    for block in re.split(r'\n{2,}', content.strip()):
+        lines = block.strip().splitlines()
+        time_match = None
+        text_start = 0
+        for li, line in enumerate(lines):
+            m = re.match(r'(\d+:\d+:\d+[,\.]\d+)\s*-->\s*(\d+:\d+:\d+[,\.]\d+)', line)
+            if m:
+                time_match = m
+                text_start = li + 1
+                break
+        if not time_match or text_start >= len(lines):
+            continue
+        start = _srt_time_to_seconds(time_match.group(1))
+        end = _srt_time_to_seconds(time_match.group(2))
+        text = re.sub(r'<[^>]+>', '', ' '.join(lines[text_start:])).strip()
+        if not text:
+            continue
+        segments.append({
+            "id": len(segments),
+            "start": round(start, 3),
+            "end": round(end, 3),
+            "text": text,
+            "words": _distribute_words(text, start, end),
+        })
+    return segments
+
+
+def _parse_ass(content: str) -> list:
+    segments = []
+    in_events = False
+    format_cols = None
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped == '[Events]':
+            in_events = True
+            continue
+        if stripped.startswith('[') and stripped.endswith(']') and in_events:
+            break
+        if not in_events:
+            continue
+        if stripped.startswith('Format:'):
+            format_cols = [c.strip().lower() for c in stripped[7:].split(',')]
+            continue
+        if stripped.startswith('Dialogue:') and format_cols:
+            parts = stripped[9:].split(',', len(format_cols) - 1)
+            if len(parts) < len(format_cols):
+                continue
+            row = dict(zip(format_cols, parts))
+            try:
+                start = _ass_time_to_seconds(row['start'])
+                end = _ass_time_to_seconds(row['end'])
+            except (KeyError, ValueError, IndexError):
+                continue
+            text = re.sub(r'\{[^}]*\}', '', row.get('text', '')).strip()
+            if not text:
+                continue
+            segments.append({
+                "id": len(segments),
+                "start": round(start, 3),
+                "end": round(end, 3),
+                "text": text,
+                "words": _distribute_words(text, start, end),
+            })
+    return segments
+
+
+@app.post("/import/subtitles")
+async def import_subtitles(file: UploadFile = File(...)):
+    content = (await file.read()).decode('utf-8-sig', errors='replace')
+    fname = file.filename.lower()
+    if fname.endswith('.srt'):
+        segs = _parse_srt(content)
+    elif fname.endswith(('.ass', '.ssa')):
+        segs = _parse_ass(content)
+    else:
+        raise HTTPException(400, "Unsupported format. Upload .srt or .ass")
+    return {"segments": segs, "language": "unknown"}
 
 
 def _srt_time(seconds: float) -> str:

@@ -264,6 +264,70 @@
   .hl-export-btn { margin-top: 12px; }
   .hl-stats { font-size: 11px; color: var(--accent2); margin-top: 8px; min-height: 16px; text-align: center; }
 
+  /* Subtitle import zone */
+  .sub-upload-zone {
+    border: 1px dashed var(--border); border-radius: var(--radius);
+    padding: 14px 12px; text-align: center; cursor: pointer;
+    background: var(--surface2); transition: all 0.2s; font-size: 12px;
+    color: var(--muted);
+  }
+  .sub-upload-zone:hover { border-color: var(--accent2); color: var(--accent2); }
+  .sub-upload-zone input { display: none; }
+
+  /* Edit mode */
+  .segments-header .edit-toggle-btn {
+    padding: 3px 10px; font-size: 11px; font-weight: 700; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface2); color: var(--muted);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .segments-header .edit-toggle-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .segments-header .edit-toggle-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+  .seg-edit-time-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+  .seg-edit-time-row input {
+    width: 70px; background: var(--surface); border: 1px solid var(--border);
+    color: var(--accent2); border-radius: 6px; padding: 3px 6px; font-size: 11px;
+    font-family: monospace; text-align: center; outline: none;
+  }
+  .seg-edit-time-row input:focus { border-color: var(--accent2); }
+  .seg-edit-time-row span { color: var(--muted); font-size: 11px; }
+  .seg-edit-delete-btn {
+    margin-left: auto; background: none; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 6px; padding: 2px 7px; font-size: 13px;
+    cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+  }
+  .seg-edit-delete-btn:hover { border-color: var(--accent); color: var(--accent); }
+  textarea.seg-edit-text {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 13px;
+    resize: vertical; outline: none; font-family: inherit; min-height: 52px; line-height: 1.4;
+  }
+  textarea.seg-edit-text:focus { border-color: var(--accent2); }
+  .seg-add-btn {
+    display: block; width: 100%; margin-top: 4px; padding: 4px;
+    background: none; border: 1px dashed var(--border); color: var(--muted);
+    border-radius: 6px; font-size: 11px; cursor: pointer; transition: all 0.15s;
+  }
+  .seg-add-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+
+  /* Timeline */
+  .timeline-bar {
+    border-top: 1px solid var(--border); background: #060609;
+    display: flex; flex-direction: column; flex-shrink: 0; height: 158px;
+  }
+  .timeline-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 5px 14px; border-bottom: 1px solid var(--border); height: 28px; flex-shrink: 0;
+  }
+  .timeline-zoom-controls { display: flex; align-items: center; gap: 5px; }
+  .tl-btn {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 5px; padding: 1px 8px; font-size: 14px; cursor: pointer;
+    line-height: 1.5; transition: all 0.15s;
+  }
+  .tl-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  #timeline-canvas { flex: 1; width: 100%; display: block; cursor: crosshair; }
+
   /* Segment score bar */
   .seg-score-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
   .seg-score-bar-bg { flex: 1; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; cursor: pointer; }
@@ -298,6 +362,15 @@
         <input type="file" id="file-input" accept="video/*">
       </div>
       <div id="file-name" style="font-size:12px;color:var(--muted);margin-top:8px;text-align:center;"></div>
+    </div>
+
+    <!-- Import subtitles -->
+    <div class="section">
+      <div class="section-title">Import Subtitles</div>
+      <div class="sub-upload-zone" onclick="document.getElementById('sub-file-input').click()">
+        📄 Upload SRT or ASS file
+        <input type="file" id="sub-file-input" accept=".srt,.ass,.ssa">
+      </div>
     </div>
 
     <!-- Whisper settings -->
@@ -395,8 +468,11 @@
       <label>Outline Width: <span id="outline-val">4</span>px</label>
       <input type="range" id="outline-width" min="0" max="12" value="4" oninput="document.getElementById('outline-val').textContent=this.value;updatePreview()">
 
-      <label>Position: <span id="pos-val">85</span>%</label>
+      <label>Vertical: <span id="pos-val">85</span>%</label>
       <input type="range" id="position" min="10" max="98" value="85" oninput="document.getElementById('pos-val').textContent=this.value;updatePreview()">
+
+      <label>Horizontal: <span id="pos-x-val">50</span>%</label>
+      <input type="range" id="position-x" min="5" max="95" value="50" oninput="document.getElementById('pos-x-val').textContent=this.value;updatePreview()">
 
       <div class="toggle-row">
         <span class="toggle-label">Uppercase</span>
@@ -521,14 +597,31 @@
       <div class="segments-panel">
         <div class="segments-header">
           <h3>Transcript <span id="lang-badge"></span></h3>
-          <span class="seg-count" id="seg-count">0 segments</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="seg-count" id="seg-count">0 segments</span>
+            <button type="button" class="edit-toggle-btn" id="edit-mode-btn" onclick="toggleEditMode()">Edit</button>
+          </div>
         </div>
         <div class="segments-list" id="segments-list">
           <div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;">
-            Transcribe a video to see segments
+            Transcribe a video or import subtitles
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Timeline (shown in edit mode) -->
+    <div class="timeline-bar" id="timeline-bar" style="display:none">
+      <div class="timeline-header">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Timeline</span>
+        <div class="timeline-zoom-controls">
+          <button type="button" class="tl-btn" onclick="zoomTimeline(-1)" title="Zoom out">−</button>
+          <span id="tl-zoom-label" style="font-size:11px;color:var(--muted);min-width:30px;text-align:center">1×</span>
+          <button type="button" class="tl-btn" onclick="zoomTimeline(1)" title="Zoom in">+</button>
+          <button type="button" class="tl-btn" onclick="fitTimeline()" style="font-size:10px;padding:1px 8px" title="Fit all">Fit</button>
+        </div>
+      </div>
+      <canvas id="timeline-canvas"></canvas>
     </div>
 
     <!-- Export bar -->
@@ -552,12 +645,54 @@ let segmentGifs = {};
 let cropAspect = '9:16';
 let highlightScores = [];
 let highlightSelected = new Set();
+let editMode = false;
+
+// Timeline state
+let waveformData = null;   // { peaks: Float32Array, duration, numPeaks }
+let tlZoom = 100;          // px/sec
+let tlOffset = 0;          // seconds at left edge
+let tlDrag = null;         // active drag: { type, segIdx, startX, origStart, origEnd }
+let tlHoverSeg = -1;
+let tlRafId = null;
 
 // ── File handling ──────────────────────────────────────────────
 document.getElementById('file-input').addEventListener('change', e => {
   const f = e.target.files[0];
   if (f) loadVideo(f);
 });
+
+document.getElementById('sub-file-input').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) importSubtitles(f);
+  e.target.value = '';
+});
+
+async function importSubtitles(f) {
+  const zone = document.querySelector('.sub-upload-zone');
+  zone.textContent = '⏳ Importing…';
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const res = await fetch('/import/subtitles', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    segments = data.segments;
+    segmentEmojis = {};
+    segmentGifs = {};
+    highlightScores = [];
+    highlightSelected = new Set();
+    renderSegmentsList();
+    refreshGifTargetDropdown();
+    document.getElementById('hl-local-btn').disabled = false;
+    enableExports();
+    showLangBadge(data.language !== 'unknown' ? data.language : '');
+    setStatus(`Imported ${segments.length} subtitles from ${f.name}`);
+  } catch (err) {
+    setStatus('Import error: ' + err.message);
+    alert('Import failed: ' + err.message);
+  }
+  zone.innerHTML = '📄 Upload SRT or ASS file';
+}
 
 function handleDrop(e) {
   e.preventDefault();
@@ -581,8 +716,22 @@ function loadVideo(f) {
     renderSubtitles(vid.currentTime);
     updateGifOverlay(vid.currentTime);
   });
-  window.addEventListener('resize', () => { resizeCanvas(); updateCropOverlay(); });
+  vid.addEventListener('play', () => { if (editMode) startTlRaf(); });
+  vid.addEventListener('pause', () => stopTlRaf());
+  vid.addEventListener('ended', () => stopTlRaf());
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+    updateCropOverlay();
+    if (document.getElementById('timeline-bar').style.display !== 'none') {
+      const bar = document.getElementById('timeline-bar');
+      const canvas = document.getElementById('timeline-canvas');
+      canvas.width = bar.clientWidth;
+      canvas.height = bar.clientHeight - 28;
+      drawTimeline();
+    }
+  });
   document.getElementById('crop-export-btn').disabled = false;
+  generateWaveform(f);
 }
 
 function resizeCanvas() {
@@ -644,10 +793,35 @@ function renderSegmentsList() {
   const list = document.getElementById('segments-list');
   document.getElementById('seg-count').textContent = `${segments.length} segments`;
   list.innerHTML = '';
+
+  if (!segments.length) {
+    list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;">Transcribe a video or import subtitles</div>';
+    return;
+  }
+
   segments.forEach((seg, i) => {
     const card = document.createElement('div');
     card.className = 'segment-card';
     card.id = `seg-${i}`;
+
+    if (editMode) {
+      card.innerHTML = `
+        <div class="seg-edit-time-row">
+          <input type="text" value="${fmt(seg.start)}" title="Start time (m:ss.s)"
+            onblur="updateSegmentTime(${i},'start',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+          <span>→</span>
+          <input type="text" value="${fmt(seg.end)}" title="End time (m:ss.s)"
+            onblur="updateSegmentTime(${i},'end',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+          <button type="button" class="seg-edit-delete-btn" onclick="deleteSegment(${i})" title="Delete segment">🗑</button>
+        </div>
+        <textarea class="seg-edit-text" oninput="updateSegmentText(${i},this.value)">${seg.text}</textarea>
+        <button type="button" class="seg-add-btn" onclick="addSegmentAfter(${i})">+ Add segment after</button>`;
+      list.appendChild(card);
+      return;
+    }
+
     const ts = `${fmt(seg.start)} → ${fmt(seg.end)}`;
     const wordsHtml = (seg.words || []).map(w =>
       `<span class="seg-word" data-start="${w.start}" data-end="${w.end}">${w.word.trim()}</span>`
@@ -695,6 +869,110 @@ function renderSegmentsList() {
   });
 }
 
+// ── Edit mode ─────────────────────────────────────────────────
+function toggleEditMode() {
+  editMode = !editMode;
+  const btn = document.getElementById('edit-mode-btn');
+  btn.classList.toggle('active', editMode);
+  btn.textContent = editMode ? 'Done' : 'Edit';
+  const bar = document.getElementById('timeline-bar');
+  bar.style.display = editMode ? 'flex' : 'none';
+  if (editMode) {
+    requestAnimationFrame(() => initTimeline());
+    const vid = document.getElementById('video-player');
+    if (vid.style.display !== 'none' && !vid.paused) startTlRaf();
+  } else {
+    stopTlRaf();
+  }
+  renderSegmentsList();
+}
+
+function parseFmt(str) {
+  const parts = str.trim().split(':');
+  if (parts.length !== 2) return NaN;
+  return parseInt(parts[0], 10) * 60 + parseFloat(parts[1]);
+}
+
+function distributeWords(text, start, end) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const dur = (end - start) / words.length;
+  return words.map((w, i) => ({
+    word: w,
+    start: Math.round((start + i * dur) * 1000) / 1000,
+    end: Math.round((start + (i + 1) * dur) * 1000) / 1000,
+  }));
+}
+
+function updateSegmentText(i, text) {
+  segments[i].text = text;
+  segments[i].words = distributeWords(text, segments[i].start, segments[i].end);
+  updatePreview();
+  drawTimeline();
+}
+
+function updateSegmentTime(i, field, value) {
+  const t = parseFmt(value);
+  if (isNaN(t) || t < 0) return;
+  segments[i][field] = Math.round(t * 1000) / 1000;
+  segments[i].words = distributeWords(segments[i].text, segments[i].start, segments[i].end);
+  // Refresh just the time input to show normalised value
+  const card = document.getElementById(`seg-${i}`);
+  if (card) {
+    const inputs = card.querySelectorAll('.seg-edit-time-row input');
+    if (field === 'start' && inputs[0]) inputs[0].value = fmt(segments[i].start);
+    if (field === 'end' && inputs[1]) inputs[1].value = fmt(segments[i].end);
+  }
+  updatePreview();
+  drawTimeline();
+}
+
+function deleteSegment(i) {
+  segments.splice(i, 1);
+  // Re-index ids
+  segments.forEach((s, idx) => { s.id = idx; });
+  // Shift emoji/gif maps
+  const newEmojis = {}, newGifs = {};
+  Object.entries(segmentEmojis).forEach(([k, v]) => { const n = parseInt(k); if (n < i) newEmojis[n] = v; else if (n > i) newEmojis[n-1] = v; });
+  Object.entries(segmentGifs).forEach(([k, v]) => { const n = parseInt(k); if (n < i) newGifs[n] = v; else if (n > i) newGifs[n-1] = v; });
+  segmentEmojis = newEmojis;
+  segmentGifs = newGifs;
+  highlightScores = [];
+  highlightSelected = new Set();
+  renderSegmentsList();
+  refreshGifTargetDropdown();
+  updatePreview();
+}
+
+function addSegmentAfter(i) {
+  const prevEnd = segments[i].end;
+  const nextStart = segments[i + 1]?.start ?? prevEnd + 3;
+  const newSeg = {
+    id: i + 1,
+    start: Math.round(prevEnd * 1000) / 1000,
+    end: Math.round(Math.min(prevEnd + 2, nextStart) * 1000) / 1000,
+    text: '',
+    words: [],
+  };
+  segments.splice(i + 1, 0, newSeg);
+  segments.forEach((s, idx) => { s.id = idx; });
+  // Shift emoji/gif maps for indices > i
+  const newEmojis = {}, newGifs = {};
+  Object.entries(segmentEmojis).forEach(([k, v]) => { const n = parseInt(k); newEmojis[n <= i ? n : n + 1] = v; });
+  Object.entries(segmentGifs).forEach(([k, v]) => { const n = parseInt(k); newGifs[n <= i ? n : n + 1] = v; });
+  segmentEmojis = newEmojis;
+  segmentGifs = newGifs;
+  highlightScores = [];
+  highlightSelected = new Set();
+  renderSegmentsList();
+  refreshGifTargetDropdown();
+  // Focus the new card's textarea
+  setTimeout(() => {
+    const card = document.getElementById(`seg-${i + 1}`);
+    if (card) { card.querySelector('textarea')?.focus(); card.scrollIntoView({ block: 'nearest' }); }
+  }, 50);
+}
+
 function fmt(s) {
   const m = Math.floor(s/60), sec = (s%60).toFixed(1).padStart(4,'0');
   return `${m}:${sec}`;
@@ -710,6 +988,7 @@ function getStyle() {
     outlineColor: document.getElementById('outline-color').value,
     outlineWidth: parseInt(document.getElementById('outline-width').value),
     position: parseInt(document.getElementById('position').value) / 100,
+    positionX: parseInt(document.getElementById('position-x').value) / 100,
     uppercase: document.getElementById('uppercase-toggle').classList.contains('on'),
     highlightEnabled: document.getElementById('highlight-toggle').classList.contains('on'),
     wordsPerChunk: parseInt(document.getElementById('words-per-chunk').value),
@@ -755,7 +1034,7 @@ function renderSubtitles(time) {
   ctx.textBaseline = 'bottom';
 
   const y = canvas.height * s.position;
-  const cx = canvas.width / 2;
+  const cx = canvas.width * s.positionX;
 
   if (s.highlightEnabled) {
     // Render word by word with highlight
@@ -891,6 +1170,8 @@ function getAssStyle() {
     outline: s.outlineWidth,
     shadow: 0,
     margin_v: Math.round((1 - s.position / 100) * 1920 * 0.15 + 40),
+    pos_x_frac: s.positionX,
+    pos_y_frac: s.position,
   };
 }
 
@@ -1279,6 +1560,311 @@ function removeEmoji(segIdx, emoji) {
   updatePreview();
 }
 
+// ── Timeline ──────────────────────────────────────────────────
+async function generateWaveform(file) {
+  try {
+    const ab = await file.arrayBuffer();
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = await ac.decodeAudioData(ab);
+    const data = buf.getChannelData(0);
+    const dur = buf.duration;
+    const numPeaks = Math.min(8192, Math.ceil(dur * 100));
+    const blockSize = Math.floor(data.length / numPeaks);
+    const peaks = new Float32Array(numPeaks);
+    for (let i = 0; i < numPeaks; i++) {
+      let max = 0;
+      const base = i * blockSize;
+      for (let j = 0; j < blockSize; j++) {
+        const abs = Math.abs(data[base + j] || 0);
+        if (abs > max) max = abs;
+      }
+      peaks[i] = max;
+    }
+    waveformData = { peaks, duration: dur, numPeaks };
+    ac.close();
+    if (document.getElementById('timeline-bar').style.display !== 'none') drawTimeline();
+  } catch (e) {
+    console.warn('Waveform failed:', e);
+  }
+}
+
+function tlTotalDuration() {
+  const vid = document.getElementById('video-player');
+  if (vid.style.display !== 'none' && vid.duration > 0) return vid.duration;
+  if (segments.length) return Math.max(...segments.map(s => s.end)) + 1;
+  return 60;
+}
+
+function initTimeline() {
+  const bar = document.getElementById('timeline-bar');
+  const canvas = document.getElementById('timeline-canvas');
+  canvas.width = bar.clientWidth;
+  canvas.height = bar.clientHeight - 28;
+  canvas.onmousedown = tlMouseDown;
+  canvas.onmousemove = tlMouseMove;
+  canvas.onmouseup = tlMouseUp;
+  canvas.onmouseleave = tlMouseLeave;
+  canvas.addEventListener('wheel', tlWheel, { passive: false });
+  fitTimeline();
+}
+
+function fitTimeline() {
+  const canvas = document.getElementById('timeline-canvas');
+  if (!canvas) return;
+  const W = canvas.width || 800;
+  const dur = tlTotalDuration();
+  tlZoom = dur > 0 ? Math.max(10, (W - 20) / dur) : 100;
+  tlOffset = 0;
+  updateTlZoomLabel();
+  drawTimeline();
+}
+
+function zoomTimeline(dir) {
+  const canvas = document.getElementById('timeline-canvas');
+  const W = canvas.width;
+  const centerT = tlOffset + W / 2 / tlZoom;
+  tlZoom = Math.max(10, Math.min(3000, tlZoom * (dir > 0 ? 1.6 : 0.625)));
+  tlOffset = Math.max(0, centerT - W / 2 / tlZoom);
+  updateTlZoomLabel();
+  drawTimeline();
+}
+
+function updateTlZoomLabel() {
+  const z = tlZoom / 100;
+  const lbl = document.getElementById('tl-zoom-label');
+  if (lbl) lbl.textContent = z >= 10 ? `${Math.round(z)}×` : z >= 1 ? `${z.toFixed(1)}×` : `${z.toFixed(2)}×`;
+}
+
+function tlDims() {
+  const canvas = document.getElementById('timeline-canvas');
+  const W = canvas.width, H = canvas.height;
+  const RULER = 20, WAVE = 54;
+  const SUBS_Y = RULER + WAVE + 3;
+  const SUBS_H = H - SUBS_Y - 3;
+  return { W, H, RULER, WAVE, SUBS_Y, SUBS_H };
+}
+
+function tlX(t) { return (t - tlOffset) * tlZoom; }
+function tlT(x) { return tlOffset + x / tlZoom; }
+
+function drawTimeline() {
+  const canvas = document.getElementById('timeline-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const { W, H, RULER, WAVE, SUBS_Y, SUBS_H } = tlDims();
+  if (!W || !H) return;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#060609';
+  ctx.fillRect(0, 0, W, H);
+
+  // ── Ruler ──
+  ctx.fillStyle = '#10101a';
+  ctx.fillRect(0, 0, W, RULER);
+  const tick = tlNiceTick(tlZoom);
+  const t0 = Math.floor(tlOffset / tick) * tick;
+  ctx.font = '9px monospace';
+  ctx.textBaseline = 'middle';
+  for (let t = t0; t < tlOffset + W / tlZoom + tick; t += tick) {
+    const x = Math.round(tlX(t));
+    if (x < -30 || x > W + 10) continue;
+    ctx.fillStyle = '#333';
+    ctx.fillRect(x, RULER - 5, 1, 5);
+    ctx.fillStyle = '#666';
+    ctx.textAlign = 'left';
+    ctx.fillText(tlFmtTime(t), x + 2, RULER / 2);
+  }
+  ctx.fillStyle = '#222';
+  ctx.fillRect(0, RULER, W, 1);
+
+  // ── Waveform ──
+  ctx.fillStyle = '#0c0c16';
+  ctx.fillRect(0, RULER, W, WAVE);
+  if (waveformData) {
+    const { peaks, duration, numPeaks } = waveformData;
+    const yCtr = RULER + WAVE / 2;
+    ctx.fillStyle = '#1e6e6e';
+    ctx.fillRect(0, yCtr, W, 1);
+    for (let px = 0; px < W; px++) {
+      const t = tlT(px);
+      if (t < 0 || t > duration) continue;
+      const idx = Math.min(numPeaks - 1, Math.floor((t / duration) * numPeaks));
+      const amp = Math.round(peaks[idx] * (WAVE / 2 - 2));
+      if (amp < 1) continue;
+      ctx.fillStyle = '#25f4ee60';
+      ctx.fillRect(px, yCtr - amp, 1, amp * 2);
+    }
+  }
+
+  // ── Subtitle blocks ──
+  ctx.fillStyle = '#111118';
+  ctx.fillRect(0, SUBS_Y - 3, W, 3);
+  ctx.fillStyle = '#0c0c14';
+  ctx.fillRect(0, SUBS_Y, W, SUBS_H);
+
+  segments.forEach((seg, i) => {
+    const x1 = tlX(seg.start), x2 = tlX(seg.end);
+    if (x2 < -1 || x1 > W + 1) return;
+    const bx = Math.max(0, x1), bx2 = Math.min(W, x2), bw = bx2 - bx;
+    if (bw <= 0) return;
+    const isDragging = tlDrag?.segIdx === i;
+    const isHovered = tlHoverSeg === i;
+    ctx.fillStyle = isDragging ? '#fe2c55dd' : isHovered ? '#fe2c55bb' : '#fe2c5580';
+    tlRoundRect(ctx, bx, SUBS_Y + 1, bw, SUBS_H - 2, 3);
+    ctx.fill();
+    const hw = Math.min(6, bw / 3);
+    if (x1 >= 0 && bw > 8) { ctx.fillStyle = '#0007'; tlRoundRect(ctx, bx, SUBS_Y + 1, hw, SUBS_H - 2, 3); ctx.fill(); }
+    if (x2 <= W && bw > 8) { ctx.fillStyle = '#0007'; tlRoundRect(ctx, bx2 - hw, SUBS_Y + 1, hw, SUBS_H - 2, 3); ctx.fill(); }
+    if (bw > 18) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(bx + hw + 2, SUBS_Y, bw - hw * 2 - 4, SUBS_H); ctx.clip();
+      ctx.fillStyle = 'rgba(255,255,255,.88)';
+      ctx.font = '10px Inter, sans-serif';
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(seg.text, bx + hw + 4, SUBS_Y + SUBS_H / 2);
+      ctx.restore();
+    }
+  });
+
+  // ── Playhead ──
+  const vid = document.getElementById('video-player');
+  const ph = vid.style.display !== 'none' ? vid.currentTime : 0;
+  const phX = Math.round(tlX(ph));
+  if (phX >= 0 && phX <= W) {
+    ctx.strokeStyle = '#fe2c55';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(phX, 0); ctx.lineTo(phX, H); ctx.stroke();
+    ctx.fillStyle = '#fe2c55';
+    ctx.beginPath(); ctx.moveTo(phX - 5, 0); ctx.lineTo(phX + 5, 0); ctx.lineTo(phX, 8); ctx.closePath(); ctx.fill();
+  }
+}
+
+function tlRoundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function tlNiceTick(pxPerSec) {
+  const sec = 80 / pxPerSec;
+  for (const n of [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600]) {
+    if (n >= sec) return n;
+  }
+  return 600;
+}
+
+function tlFmtTime(s) {
+  if (s < 0) return '';
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+}
+
+function tlGetHit(x) {
+  const { SUBS_Y, SUBS_H } = tlDims();
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const x1 = tlX(segments[i].start), x2 = tlX(segments[i].end);
+    const hw = Math.min(8, Math.max(4, (x2 - x1) / 4));
+    if (x < x1 - 2 || x > x2 + 2) continue;
+    if (x <= x1 + hw) return { type: 'resize-start', segIdx: i };
+    if (x >= x2 - hw) return { type: 'resize-end', segIdx: i };
+    return { type: 'move', segIdx: i };
+  }
+  return null;
+}
+
+function tlMouseDown(e) {
+  const x = e.offsetX, y = e.offsetY;
+  const { SUBS_Y, SUBS_H } = tlDims();
+  if (y < SUBS_Y || y > SUBS_Y + SUBS_H) {
+    const vid = document.getElementById('video-player');
+    if (vid.style.display !== 'none') vid.currentTime = Math.max(0, tlT(x));
+    drawTimeline();
+    return;
+  }
+  const hit = tlGetHit(x);
+  if (!hit) {
+    const vid = document.getElementById('video-player');
+    if (vid.style.display !== 'none') vid.currentTime = Math.max(0, tlT(x));
+    return;
+  }
+  tlDrag = { type: hit.type, segIdx: hit.segIdx, startX: x, origStart: segments[hit.segIdx].start, origEnd: segments[hit.segIdx].end };
+  e.currentTarget.style.cursor = hit.type === 'move' ? 'grabbing' : 'ew-resize';
+  e.preventDefault();
+}
+
+function tlMouseMove(e) {
+  const x = e.offsetX, y = e.offsetY;
+  const { SUBS_Y, SUBS_H } = tlDims();
+  if (tlDrag) {
+    const dt = (x - tlDrag.startX) / tlZoom;
+    const seg = segments[tlDrag.segIdx];
+    const MIN = 0.05;
+    if (tlDrag.type === 'move') {
+      const dur = tlDrag.origEnd - tlDrag.origStart;
+      seg.start = Math.round(Math.max(0, tlDrag.origStart + dt) * 1000) / 1000;
+      seg.end = Math.round((seg.start + dur) * 1000) / 1000;
+    } else if (tlDrag.type === 'resize-start') {
+      seg.start = Math.round(Math.min(tlDrag.origEnd - MIN, Math.max(0, tlDrag.origStart + dt)) * 1000) / 1000;
+    } else {
+      seg.end = Math.round(Math.max(tlDrag.origStart + MIN, tlDrag.origEnd + dt) * 1000) / 1000;
+    }
+    seg.words = distributeWords(seg.text, seg.start, seg.end);
+    updateTimeInputs(tlDrag.segIdx);
+    updatePreview();
+    drawTimeline();
+    return;
+  }
+  if (y >= SUBS_Y && y <= SUBS_Y + SUBS_H) {
+    const hit = tlGetHit(x);
+    tlHoverSeg = hit ? hit.segIdx : -1;
+    e.currentTarget.style.cursor = !hit ? 'crosshair' : hit.type === 'move' ? 'grab' : 'ew-resize';
+  } else {
+    tlHoverSeg = -1;
+    e.currentTarget.style.cursor = 'crosshair';
+  }
+  drawTimeline();
+}
+
+function tlMouseUp() {
+  if (tlDrag) { renderSegmentsList(); tlDrag = null; }
+  const canvas = document.getElementById('timeline-canvas');
+  if (canvas) canvas.style.cursor = 'crosshair';
+}
+
+function tlMouseLeave() {
+  if (tlDrag) { renderSegmentsList(); tlDrag = null; }
+  tlHoverSeg = -1;
+  drawTimeline();
+}
+
+function tlWheel(e) {
+  e.preventDefault();
+  if (e.ctrlKey || e.metaKey) {
+    const curT = tlT(e.offsetX);
+    tlZoom = Math.max(10, Math.min(3000, tlZoom * (e.deltaY < 0 ? 1.12 : 0.89)));
+    tlOffset = Math.max(0, curT - e.offsetX / tlZoom);
+    updateTlZoomLabel();
+  } else {
+    tlOffset = Math.max(0, tlOffset + e.deltaY / tlZoom);
+  }
+  drawTimeline();
+}
+
+function startTlRaf() {
+  if (tlRafId) return;
+  const loop = () => { drawTimeline(); tlRafId = requestAnimationFrame(loop); };
+  tlRafId = requestAnimationFrame(loop);
+}
+function stopTlRaf() {
+  if (tlRafId) { cancelAnimationFrame(tlRafId); tlRafId = null; }
+  drawTimeline();
+}
+
+// ── Emoji reactions ───────────────────────────────────────────
 function refreshEmojiRow(segIdx) {
   const row = document.getElementById(`emoji-row-${segIdx}`);
   if (!row) return;
