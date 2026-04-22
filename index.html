@@ -101,11 +101,11 @@
   .preview-area { flex: 1; display: flex; gap: 0; overflow: hidden; }
 
   .video-panel {
-    flex: 1; display: flex; flex-direction: column; align-items: center;
-    justify-content: center; padding: 24px; background: #050508; position: relative;
+    flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 24px; background: #050508; position: relative; overflow: hidden;
   }
-  .video-wrapper { position: relative; max-width: 100%; max-height: 100%; }
-  video { max-width: 100%; max-height: calc(100vh - 200px); border-radius: var(--radius); display: block; }
+  .video-wrapper { position: relative; max-width: 100%; max-height: 100%; display: flex; align-items: center; justify-content: center; }
+  video { max-width: 100%; max-height: 100%; border-radius: var(--radius); display: block; }
   .video-placeholder {
     width: 300px; height: 500px; border-radius: var(--radius);
     background: var(--surface2); border: 2px dashed var(--border);
@@ -265,6 +265,13 @@
   .crop-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
   .crop-export-btn { margin-top: 12px; }
   .gif-search-section { margin-top: 10px; }
+
+  /* Panel tabs */
+  .panel-tabs { display:flex; gap:2px; }
+  .panel-tab { background:none; border:none; border-bottom:2px solid transparent; color:var(--muted); cursor:pointer; font-size:12px; font-weight:600; padding:4px 10px; transition:all 0.15s; white-space:nowrap; }
+  .panel-tab:hover { color:var(--text); }
+  .panel-tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  #reaction-panel { flex:1; overflow-y:auto; padding:8px 10px; flex-direction:column; gap:6px; }
 
   /* Reaction editor panel */
   .re-item { display:grid; grid-template-columns:auto 1fr 1fr auto; gap:6px; align-items:center; background:var(--surface2); border-radius:8px; padding:7px 10px; font-size:12px; }
@@ -675,10 +682,13 @@
         </div>
       </div>
 
-      <!-- Segments -->
+      <!-- Segments / Reactions panel -->
       <div class="segments-panel">
         <div class="segments-header">
-          <h3>Transcript <span id="lang-badge"></span></h3>
+          <div class="panel-tabs">
+            <button type="button" class="panel-tab active" id="tab-transcript" onclick="switchPanelTab('transcript')">Transcript <span id="lang-badge"></span></button>
+            <button type="button" class="panel-tab" id="tab-reactions" onclick="switchPanelTab('reactions')" style="display:none">Emoji &amp; GIF</button>
+          </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="seg-count" id="seg-count">0 segments</span>
             <button type="button" class="edit-toggle-btn" id="edit-mode-btn" onclick="toggleEditMode()">Edit</button>
@@ -688,6 +698,13 @@
           <div style="padding:40px 20px;text-align:center;color:var(--muted);font-size:13px;">
             Transcribe a video or import subtitles
           </div>
+        </div>
+        <div id="reaction-panel" style="display:none;flex:1;overflow-y:auto;padding:8px 10px;display:none;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:6px;padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px">
+            <button type="button" class="tl-btn" onclick="addEmojiItemManual()">+ Emoji</button>
+            <button type="button" class="tl-btn" onclick="addGifItemManual()">+ GIF</button>
+          </div>
+          <div id="reaction-list"></div>
         </div>
       </div>
     </div>
@@ -704,18 +721,6 @@
         </div>
       </div>
       <canvas id="timeline-canvas"></canvas>
-    </div>
-
-    <!-- Emoji / GIF item editor (shown in edit mode) -->
-    <div id="reaction-editor" style="display:none;border-top:1px solid var(--border);background:var(--surface);max-height:220px;overflow-y:auto">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1">
-        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Emoji &amp; GIF — tidslinje</span>
-        <div style="display:flex;gap:6px">
-          <button type="button" class="tl-btn" onclick="addEmojiItemManual()" title="Lägg till emoji-block">+ Emoji</button>
-          <button type="button" class="tl-btn" onclick="addGifItemManual()"   title="Lägg till GIF-block (välj GIF i söken först)">+ GIF</button>
-        </div>
-      </div>
-      <div id="reaction-list" style="padding:6px 10px;display:flex;flex-direction:column;gap:6px"></div>
     </div>
 
     <!-- Export bar -->
@@ -984,7 +989,7 @@ function toggleEditMode() {
   btn.textContent = editMode ? 'Done' : 'Edit';
   const bar = document.getElementById('timeline-bar');
   bar.style.display = editMode ? 'flex' : 'none';
-  document.getElementById('reaction-editor').style.display = editMode ? 'block' : 'none';
+  document.getElementById('tab-reactions').style.display = editMode ? '' : 'none';
   if (editMode) {
     requestAnimationFrame(() => initTimeline());
     const vid = document.getElementById('video-player');
@@ -992,8 +997,18 @@ function toggleEditMode() {
     renderReactionList();
   } else {
     stopTlRaf();
+    switchPanelTab('transcript');
   }
   renderSegmentsList();
+}
+
+function switchPanelTab(tab) {
+  const isTranscript = tab === 'transcript';
+  document.getElementById('segments-list').style.display  = isTranscript ? '' : 'none';
+  document.getElementById('reaction-panel').style.display = isTranscript ? 'none' : 'flex';
+  document.getElementById('tab-transcript').classList.toggle('active', isTranscript);
+  document.getElementById('tab-reactions').classList.toggle('active', !isTranscript);
+  if (!isTranscript) renderReactionList();
 }
 
 function parseFmt(str) {
@@ -1235,14 +1250,15 @@ function renderSubtitles(time) {
     const emojiSize2 = Math.round(emojiPx * scaleFactor * (canvas.width / 1080));
     const elapsed2 = Math.max(0, time - item.start);
     const t2 = Math.min(1, elapsed2 / 0.4);
-    const effect2 = document.getElementById('emoji-effect').value;
+    const effect2 = item.effect ?? document.getElementById('emoji-effect').value;
     let dy2 = 0, alpha2 = 1, sc2 = 1;
     if (effect2 === 'fadein')    alpha2 = t2;
     else if (effect2 === 'bounceup') { dy2 = t2 < 1 ? (1 - (t2 < 0.6 ? t2/0.6 : 1 + Math.sin((t2-0.6)/0.4*Math.PI)*0.25)) * emojiSize2 * 1.5 : 0; alpha2 = Math.min(1, t2*2); }
     else if (effect2 === 'zoomin')   { sc2 = 0.2 + 0.8*t2; alpha2 = t2; }
     else if (effect2 === 'shake')    { dy2 = t2 < 1 ? Math.sin(t2 * Math.PI * 5) * emojiSize2 * 0.3 * (1-t2) : 0; }
-    const ey2 = canvas.height * s.position - emojiSize2;
-    const cx2 = canvas.width * s.positionX;
+    // Use item's own position, not the subtitle position
+    const ey2 = canvas.height * ((item.posY ?? 30) / 100);
+    const cx2 = canvas.width  * ((item.posX ?? 50) / 100);
     const totalW2 = item.emojis.length * (emojiSize2 * 1.2);
     let ex2 = cx2 - totalW2 / 2 + emojiSize2 * 0.6;
     ctx.save();
@@ -1825,23 +1841,23 @@ function renderReactionList() {
     const posX = item.posX ?? 50;
     const posY = item.posY ?? 30;
     const extra = type === 'gif'
-      ? `<div class="re-field"><label>Storlek %</label><input type="number" min="10" max="100" value="${item.size??50}" onchange="updateReItem('${type}',${item.id},'size',+this.value);"></div>
-         <div class="re-field"><label>Opacitet %</label><input type="number" min="10" max="100" value="${item.opacity??90}" onchange="updateReItem('${type}',${item.id},'opacity',+this.value);"></div>`
+      ? `<div class="re-field"><label>Storlek %</label><input type="number" min="10" max="100" value="${item.size??50}" oninput="updateReItem('${type}',${item.id},'size',+this.value)"></div>
+         <div class="re-field"><label>Opacitet %</label><input type="number" min="10" max="100" value="${item.opacity??90}" oninput="updateReItem('${type}',${item.id},'opacity',+this.value)"></div>`
       : `<button type="button" class="tl-btn" style="font-size:11px" onclick="openEmojiPickerForItem(${item.id},event.clientX,event.clientY)">Välj emojis</button>`;
     return `<div class="re-item re-item-${type}">
       <span class="re-badge">${badge}</span>
       <div class="re-field">
         <label>Start</label>
-        <input type="number" step="0.1" value="${item.start.toFixed(1)}" onchange="updateReItem('${type}',${item.id},'start',+this.value);" style="width:60px">
+        <input type="number" step="0.1" value="${item.start.toFixed(1)}" oninput="updateReItem('${type}',${item.id},'start',+this.value)" style="width:60px">
       </div>
       <div class="re-field">
         <label>Slut</label>
-        <input type="number" step="0.1" value="${item.end.toFixed(1)}" onchange="updateReItem('${type}',${item.id},'end',+this.value);" style="width:60px">
+        <input type="number" step="0.1" value="${item.end.toFixed(1)}" oninput="updateReItem('${type}',${item.id},'end',+this.value)" style="width:60px">
       </div>
       <button type="button" class="re-del" onclick="removeReItem('${type}',${item.id})">×</button>
       <div class="re-row2">
-        <div class="re-field"><label>Pos X %</label><input type="number" min="0" max="100" value="${posX}" onchange="updateReItem('${type}',${item.id},'posX',+this.value);" style="width:52px"></div>
-        <div class="re-field"><label>Pos Y %</label><input type="number" min="0" max="100" value="${posY}" onchange="updateReItem('${type}',${item.id},'posY',+this.value);" style="width:52px"></div>
+        <div class="re-field"><label>Pos X %</label><input type="number" min="0" max="100" value="${posX}" oninput="updateReItem('${type}',${item.id},'posX',+this.value)" style="width:52px"></div>
+        <div class="re-field"><label>Pos Y %</label><input type="number" min="0" max="100" value="${posY}" oninput="updateReItem('${type}',${item.id},'posY',+this.value)" style="width:52px"></div>
         <div class="re-field"><label>Effekt</label><select onchange="updateReItem('${type}',${item.id},'effect',this.value)">${effOpts}</select></div>
         ${extra}
       </div>
