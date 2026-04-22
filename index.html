@@ -238,8 +238,21 @@
   .seg-gif-badge { display: flex; align-items: center; gap: 6px; margin-top: 6px; background: var(--border); border-radius: 6px; padding: 4px 6px; }
   .seg-gif-badge img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
   .seg-gif-badge .gif-remove { background: var(--accent); border: none; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; cursor: pointer; margin-left: auto; flex-shrink: 0; }
-  .gif-overlay-item { position: absolute; pointer-events: none; border-radius: 4px; overflow: hidden; }
-  .gif-overlay-item video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .gif-overlay-item { position: absolute; pointer-events: none; border-radius: 4px; overflow: visible; transform-origin: center center; }
+  .gif-overlay-item video { width: 100%; height: auto; display: block; border-radius: 4px; }
+
+  @keyframes anim-fadein  { from { opacity:0 } to { opacity:1 } }
+  @keyframes anim-slideup { from { opacity:0; transform:translateY(40px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes anim-bounceup { 0%{opacity:0;transform:translateY(50px)} 60%{transform:translateY(-12px)} 80%{transform:translateY(6px)} 100%{opacity:1;transform:translateY(0)} }
+  @keyframes anim-zoomin  { from { opacity:0; transform:scale(0.2) } to { opacity:1; transform:scale(1) } }
+  @keyframes anim-spin    { from { opacity:0; transform:rotate(-180deg) scale(0.2) } to { opacity:1; transform:rotate(0deg) scale(1) } }
+  @keyframes anim-shake   { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-10px)} 40%{transform:translateX(10px)} 60%{transform:translateX(-6px)} 80%{transform:translateX(6px)} }
+  .gif-anim-fadein   { animation: anim-fadein   0.35s ease-out both }
+  .gif-anim-slideup  { animation: anim-slideup  0.35s ease-out both }
+  .gif-anim-bounceup { animation: anim-bounceup 0.5s  ease-out both }
+  .gif-anim-zoomin   { animation: anim-zoomin   0.35s ease-out both }
+  .gif-anim-spin     { animation: anim-spin     0.45s ease-out both }
+  .gif-anim-shake    { animation: anim-shake    0.5s  ease-in-out both }
 
   /* Crop */
   .crop-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: none; border-radius: var(--radius); }
@@ -252,6 +265,20 @@
   .crop-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
   .crop-export-btn { margin-top: 12px; }
   .gif-search-section { margin-top: 10px; }
+
+  /* Reaction editor panel */
+  .re-item { display:grid; grid-template-columns:auto 1fr 1fr auto; gap:6px; align-items:center; background:var(--surface2); border-radius:8px; padding:7px 10px; font-size:12px; }
+  .re-item-emoji { background:rgba(254,232,0,.1); border-color:rgba(254,232,0,.3); }
+  .re-item-gif   { background:rgba(100,180,255,.07); border-color:rgba(100,180,255,.3); }
+  .re-badge { font-size:18px; min-width:28px; text-align:center; }
+  .re-field { display:flex; flex-direction:column; gap:3px; }
+  .re-field label { font-size:10px; color:var(--muted); }
+  .re-field input[type=number] { width:64px; background:var(--bg); border:1px solid var(--border); border-radius:5px; color:var(--text); padding:2px 5px; font-size:12px; }
+  .re-field input[type=range] { width:80px; }
+  .re-field select { background:var(--bg); border:1px solid var(--border); border-radius:5px; color:var(--text); padding:2px 4px; font-size:11px; }
+  .re-row2 { grid-column:1/-1; display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .re-del { background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; padding:0 4px; line-height:1; }
+  .re-del:hover { color:var(--accent); }
   .gif-position-label { margin-top: 10px; }
   .gif-show-toggle-row { margin-top: 10px; }
   .giphy-key-input { margin-top: 10px; font-size: 11px; opacity: 0.6; }
@@ -316,7 +343,7 @@
   /* Timeline */
   .timeline-bar {
     border-top: 1px solid var(--border); background: #060609;
-    display: flex; flex-direction: column; flex-shrink: 0; height: 158px;
+    display: flex; flex-direction: column; flex-shrink: 0; height: 210px;
   }
   .timeline-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -350,6 +377,11 @@
     <div class="logo-sub">TikTok-style subtitles with local Whisper</div>
   </div>
 </header>
+<div id="libass-warning" style="display:none;background:#7c2d12;color:#fef3c7;padding:8px 20px;font-size:12px;border-bottom:1px solid #92400e;">
+  ⚠ ffmpeg saknar libass — video-export använder drawtext (enklare stil, ingen karaoke).
+  Kör <strong>brew install ffmpeg</strong> och starta om appen för full styling.
+  <button onclick="document.getElementById('libass-warning').style.display='none'" style="float:right;background:none;border:none;color:inherit;cursor:pointer;font-size:14px;">×</button>
+</div>
 
 <div class="layout">
   <!-- Sidebar -->
@@ -430,7 +462,7 @@
       <div class="section-title">Style</div>
 
       <label>Font</label>
-      <select id="font-select" onchange="updatePreview()">
+      <select id="font-select" onchange="document.fonts.load(`900 52px '${this.value}'`).then(()=>updatePreview())">
         <optgroup label="── Hype / TikTok ──">
           <option value="Arial Black">Arial Black</option>
           <option value="Impact">Impact</option>
@@ -524,9 +556,17 @@
       <button type="button" class="btn btn-secondary emoji-autodetect-btn" onclick="autoDetectEmojis()">✨ Auto-detect</button>
       <label for="emoji-position">Position</label>
       <select id="emoji-position" title="Emoji position relative to subtitle" onchange="updatePreview()">
-        <option value="above">Above subtitle</option>
-        <option value="below" selected>Below subtitle</option>
-        <option value="right">Right of subtitle</option>
+        <option value="above">Ovanför text</option>
+        <option value="below" selected>Under text</option>
+        <option value="right">Till höger om text</option>
+      </select>
+      <label for="emoji-effect">Effekt</label>
+      <select id="emoji-effect" title="Emoji-animationseffekt" onchange="updatePreview()">
+        <option value="none">Ingen</option>
+        <option value="fadein">Tona fram</option>
+        <option value="bounceup" selected>Studsa upp</option>
+        <option value="zoomin">Zooma in</option>
+        <option value="shake">Skaka</option>
       </select>
       <label for="emoji-size">Size: <span id="emoji-size-val">48</span>px</label>
       <input type="range" id="emoji-size" title="Emoji size in pixels" min="20" max="120" value="48" oninput="document.getElementById('emoji-size-val').textContent=this.value;updatePreview()">
@@ -546,21 +586,29 @@
         <button type="button" class="gif-search-btn" onclick="searchGifs()">🔍</button>
       </div>
       <div class="gif-results" id="gif-results"></div>
-      <label class="gif-position-label" for="gif-position">Position</label>
-      <select id="gif-position" title="GIF position on video" onchange="updateGifOverlay(document.getElementById('video-player').currentTime)">
-        <option value="top">Top</option>
-        <option value="center" selected>Center</option>
-        <option value="bottom">Bottom</option>
+      <label>Effekt</label>
+      <select id="gif-effect" title="GIF-animationseffekt" onchange="updateGifOverlay(document.getElementById('video-player').currentTime)">
+        <option value="none">Ingen</option>
+        <option value="fadein">Tona fram</option>
+        <option value="slideup" selected>Glid upp</option>
+        <option value="bounceup">Studsa upp</option>
+        <option value="zoomin">Zooma in</option>
+        <option value="spin">Snurra in</option>
+        <option value="shake">Skaka</option>
       </select>
-      <label for="gif-size">Size: <span id="gif-size-val">50</span>%</label>
-      <input type="range" id="gif-size" title="GIF size as % of video width" min="10" max="100" value="50" oninput="document.getElementById('gif-size-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
-      <label for="gif-opacity">Opacity: <span id="gif-opacity-val">90</span>%</label>
-      <input type="range" id="gif-opacity" title="GIF opacity" min="10" max="100" value="90" oninput="document.getElementById('gif-opacity-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
+      <label>Position X: <span id="gif-pos-x-val">50</span>%</label>
+      <input type="range" id="gif-pos-x" title="GIF horisontell position" min="5" max="95" value="50" oninput="document.getElementById('gif-pos-x-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
+      <label>Position Y: <span id="gif-pos-y-val">30</span>%</label>
+      <input type="range" id="gif-pos-y" title="GIF vertikal position" min="5" max="95" value="30" oninput="document.getElementById('gif-pos-y-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
+      <label for="gif-size">Storlek: <span id="gif-size-val">50</span>%</label>
+      <input type="range" id="gif-size" min="10" max="100" value="50" oninput="document.getElementById('gif-size-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
+      <label for="gif-opacity">Opacitet: <span id="gif-opacity-val">90</span>%</label>
+      <input type="range" id="gif-opacity" min="10" max="100" value="90" oninput="document.getElementById('gif-opacity-val').textContent=this.value;updateGifOverlay(document.getElementById('video-player').currentTime)">
       <div class="toggle-row gif-show-toggle-row">
-        <span class="toggle-label">Show GIFs</span>
+        <span class="toggle-label">Visa GIFs</span>
         <div class="toggle on" id="gif-toggle" onclick="this.classList.toggle('on');updateGifOverlay(document.getElementById('video-player').currentTime)"></div>
       </div>
-      <input type="text" id="giphy-key" class="giphy-key-input" placeholder="Giphy API key (optional)" title="Your Giphy API key">
+      <input type="text" id="giphy-key" class="giphy-key-input" placeholder="Giphy API key (gratis på developers.giphy.com)" title="Din Giphy API-nyckel">
     </div>
 
     <!-- Crop to Format -->
@@ -658,6 +706,18 @@
       <canvas id="timeline-canvas"></canvas>
     </div>
 
+    <!-- Emoji / GIF item editor (shown in edit mode) -->
+    <div id="reaction-editor" style="display:none;border-top:1px solid var(--border);background:var(--surface);max-height:220px;overflow-y:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 14px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:1">
+        <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px">Emoji &amp; GIF — tidslinje</span>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="tl-btn" onclick="addEmojiItemManual()" title="Lägg till emoji-block">+ Emoji</button>
+          <button type="button" class="tl-btn" onclick="addGifItemManual()"   title="Lägg till GIF-block (välj GIF i söken först)">+ GIF</button>
+        </div>
+      </div>
+      <div id="reaction-list" style="padding:6px 10px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
     <!-- Export bar -->
     <div class="export-bar" id="export-bar">
       <span style="font-size:12px;color:var(--muted);flex:1">Export</span>
@@ -688,6 +748,11 @@ let tlOffset = 0;          // seconds at left edge
 let tlDrag = null;         // active drag: { type, segIdx, startX, origStart, origEnd }
 let tlHoverSeg = -1;
 let tlRafId = null;
+
+// Check ffmpeg/libass status on load
+fetch('/api/status').then(r => r.json()).then(s => {
+  if (!s.libass) document.getElementById('libass-warning').style.display = 'block';
+}).catch(() => {});
 
 // Apply each font to its own <option> so the dropdown previews them visually
 document.fonts.ready.then(() => {
@@ -919,10 +984,12 @@ function toggleEditMode() {
   btn.textContent = editMode ? 'Done' : 'Edit';
   const bar = document.getElementById('timeline-bar');
   bar.style.display = editMode ? 'flex' : 'none';
+  document.getElementById('reaction-editor').style.display = editMode ? 'block' : 'none';
   if (editMode) {
     requestAnimationFrame(() => initTimeline());
     const vid = document.getElementById('video-player');
     if (vid.style.display !== 'none' && !vid.paused) startTlRaf();
+    renderReactionList();
   } else {
     stopTlRaf();
   }
@@ -1116,9 +1183,26 @@ function renderSubtitles(time) {
     const activeSeg = segments.findIndex(sg => time >= sg.start && time <= sg.end + 0.05);
     const emojis = activeSeg >= 0 ? (segmentEmojis[activeSeg] || []) : [];
     if (emojis.length) {
-      const emojiPx = parseInt(document.getElementById('emoji-size').value);
+      const emojiPx   = parseInt(document.getElementById('emoji-size').value);
       const emojiSize = Math.round(emojiPx * scaleFactor * (canvas.width / 1080));
-      const pos = document.getElementById('emoji-position').value;
+      const pos       = document.getElementById('emoji-position').value;
+      const effect    = document.getElementById('emoji-effect').value;
+
+      // Animation progress (first 0.4 s of segment)
+      const elapsed = Math.max(0, time - (activeSeg >= 0 ? segments[activeSeg].start : time));
+      const t = Math.min(1, elapsed / 0.4);
+      let animDy = 0, animAlpha = 1, animScale = 1;
+      if (effect === 'fadein')   { animAlpha = t; }
+      else if (effect === 'bounceup') {
+        animDy    = t < 1 ? (1 - (t < 0.6 ? t/0.6 : 1 + Math.sin((t-0.6)/0.4*Math.PI)*0.25)) * emojiSize * 1.5 : 0;
+        animAlpha = Math.min(1, t * 2);
+      }
+      else if (effect === 'zoomin')  { animScale = 0.2 + 0.8 * t; animAlpha = t; }
+      else if (effect === 'shake')   {
+        const st = Math.min(1, elapsed / 0.5);
+        animDy = st < 1 ? Math.sin(st * Math.PI * 5) * emojiSize * 0.3 * (1 - st) : 0;
+      }
+
       ctx.font = `${emojiSize}px serif`;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'center';
@@ -1128,9 +1212,49 @@ function renderSubtitles(time) {
       if (pos === 'above') ey = y - fontSize - emojiSize * 0.6;
       else if (pos === 'below') ey = y + emojiSize * 0.8;
       else { ex = cx + ctx.measureText(active.words.map(w=>w.word).join(' ')).width / 2 + emojiSize; ey = y - fontSize / 2; }
-      emojis.forEach(e => { ctx.fillText(e, ex, ey); ex += emojiSize * 1.2; });
+
+      ctx.save();
+      ctx.globalAlpha = animAlpha;
+      emojis.forEach(e => {
+        ctx.save();
+        ctx.translate(ex, ey + animDy);
+        ctx.scale(animScale, animScale);
+        ctx.fillText(e, 0, 0);
+        ctx.restore();
+        ex += emojiSize * 1.2;
+      });
+      ctx.restore();
     }
   }
+
+  // emojiItems track — render independently of segments
+  const trackEmojis = emojiItems.filter(it => time >= it.start && time <= it.end);
+  trackEmojis.forEach(item => {
+    if (!item.emojis.length) return;
+    const emojiPx   = parseInt(document.getElementById('emoji-size').value);
+    const emojiSize2 = Math.round(emojiPx * scaleFactor * (canvas.width / 1080));
+    const elapsed2 = Math.max(0, time - item.start);
+    const t2 = Math.min(1, elapsed2 / 0.4);
+    const effect2 = document.getElementById('emoji-effect').value;
+    let dy2 = 0, alpha2 = 1, sc2 = 1;
+    if (effect2 === 'fadein')    alpha2 = t2;
+    else if (effect2 === 'bounceup') { dy2 = t2 < 1 ? (1 - (t2 < 0.6 ? t2/0.6 : 1 + Math.sin((t2-0.6)/0.4*Math.PI)*0.25)) * emojiSize2 * 1.5 : 0; alpha2 = Math.min(1, t2*2); }
+    else if (effect2 === 'zoomin')   { sc2 = 0.2 + 0.8*t2; alpha2 = t2; }
+    else if (effect2 === 'shake')    { dy2 = t2 < 1 ? Math.sin(t2 * Math.PI * 5) * emojiSize2 * 0.3 * (1-t2) : 0; }
+    const ey2 = canvas.height * s.position - emojiSize2;
+    const cx2 = canvas.width * s.positionX;
+    const totalW2 = item.emojis.length * (emojiSize2 * 1.2);
+    let ex2 = cx2 - totalW2 / 2 + emojiSize2 * 0.6;
+    ctx.save();
+    ctx.font = `${emojiSize2}px serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.globalAlpha = alpha2;
+    item.emojis.forEach(e => {
+      ctx.save(); ctx.translate(ex2, ey2 + dy2); ctx.scale(sc2, sc2); ctx.fillText(e, 0, 0); ctx.restore();
+      ex2 += emojiSize2 * 1.2;
+    });
+    ctx.restore();
+  });
 
   updateActiveSegment(time);
 }
@@ -1204,7 +1328,7 @@ function getAssStyle() {
   };
   return {
     font: s.font,
-    fontsize: Math.round(s.fontSize * 0.6),
+    fontsize: s.fontSize,
     primary_color: hexToAss(s.textColor),
     highlight_color: hexToAss(s.highlightColor),
     outline_color: hexToAss(s.outlineColor),
@@ -1365,6 +1489,16 @@ async function searchGifs() {
   if (!res.ok) { alert('GIF search failed'); return; }
   const data = await res.json();
   const grid = document.getElementById('gif-results');
+  if (data.hint) {
+    grid.innerHTML = `<p style="grid-column:1/-1;color:var(--muted);font-size:12px;padding:8px 0">${data.hint}</p>`;
+    grid._data = [];
+    return;
+  }
+  if (!data.results.length) {
+    grid.innerHTML = `<p style="grid-column:1/-1;color:var(--muted);font-size:12px;padding:8px 0">Inga resultat.</p>`;
+    grid._data = [];
+    return;
+  }
   grid.innerHTML = data.results.map((g, i) =>
     `<div class="gif-thumb" data-idx="${i}" onclick="assignGif(${i})" title="${g.title}">
       <img src="${g.preview}" alt="${g.title}" loading="lazy">
@@ -1377,6 +1511,7 @@ function assignGif(thumbIdx) {
   const grid = document.getElementById('gif-results');
   const gif = grid._data[thumbIdx];
   if (!gif) return;
+  selectedGif = gif;
   const segIdx = parseInt(document.getElementById('gif-assign-target').value);
   if (isNaN(segIdx)) return;
   segmentGifs[segIdx] = gif;
@@ -1407,30 +1542,51 @@ function updateGifOverlay(time) {
   if (!overlay || vid.style.display === 'none') return;
 
   const enabled = document.getElementById('gif-toggle').classList.contains('on');
-  overlay.innerHTML = '';
-  if (!enabled) return;
+  if (!enabled) { overlay.innerHTML = ''; return; }
 
-  const activeSeg = segments.findIndex(s => time >= s.start && time <= s.end + 0.05);
-  const gif = activeSeg >= 0 ? segmentGifs[activeSeg] : null;
-  if (!gif || !gif.mp4) return;
+  // Check gifItems track first (per-item settings), then fall back to segment-based gifs
+  const trackGifItem = gifItems.find(it => time >= it.start && time <= it.end);
+  const activeSeg    = segments.findIndex(s => time >= s.start && time <= s.end + 0.05);
 
-  const sizePct = parseInt(document.getElementById('gif-size').value) / 100;
-  const opacity = parseInt(document.getElementById('gif-opacity').value) / 100;
-  const pos = document.getElementById('gif-position').value;
+  let gif, sizePct, opacity, posX, posY, effect;
+  if (trackGifItem) {
+    gif     = trackGifItem.gif;
+    sizePct = (trackGifItem.size    ?? parseInt(document.getElementById('gif-size').value))    / 100;
+    opacity = (trackGifItem.opacity ?? parseInt(document.getElementById('gif-opacity').value)) / 100;
+    posX    = (trackGifItem.posX    ?? parseInt(document.getElementById('gif-pos-x').value))   / 100;
+    posY    = (trackGifItem.posY    ?? parseInt(document.getElementById('gif-pos-y').value))   / 100;
+    effect  = trackGifItem.effect   ?? document.getElementById('gif-effect').value;
+  } else {
+    gif     = activeSeg >= 0 ? segmentGifs[activeSeg] : null;
+    sizePct = parseInt(document.getElementById('gif-size').value)    / 100;
+    opacity = parseInt(document.getElementById('gif-opacity').value) / 100;
+    posX    = parseInt(document.getElementById('gif-pos-x').value)   / 100;
+    posY    = parseInt(document.getElementById('gif-pos-y').value)   / 100;
+    effect  = document.getElementById('gif-effect').value;
+  }
+
+  if (!gif?.mp4) { overlay.innerHTML = ''; return; }
+
   const vw = vid.offsetWidth, vh = vid.offsetHeight;
-  const gw = Math.round(vw * sizePct);
-  const gh = Math.round(gw * 0.75);
+  const gw   = Math.round(vw * sizePct);
+  const left = Math.round(vw * posX - gw / 2);
+  const top  = Math.round(vh * posY);
 
-  let top;
-  if (pos === 'top') top = 12;
-  else if (pos === 'bottom') top = vh - gh - 12;
-  else top = Math.round((vh - gh) / 2);
-
-  const item = document.createElement('div');
-  item.className = 'gif-overlay-item';
-  item.style.cssText = `width:${gw}px;height:${gh}px;top:${top}px;left:${Math.round((vw-gw)/2)}px;opacity:${opacity}`;
-  item.innerHTML = `<video autoplay loop muted playsinline src="${gif.mp4}"></video>`;
-  overlay.appendChild(item);
+  // Reuse existing video element to prevent flicker — only recreate when gif changes
+  let item = overlay.querySelector('.gif-overlay-item');
+  let vidEl = item?.querySelector('video');
+  if (!item || vidEl?.dataset.src !== gif.mp4) {
+    overlay.innerHTML = '';
+    item = document.createElement('div');
+    item.className = 'gif-overlay-item' + (effect !== 'none' ? ` gif-anim-${effect}` : '');
+    vidEl = document.createElement('video');
+    vidEl.autoplay = true; vidEl.loop = true; vidEl.muted = true; vidEl.playsInline = true;
+    vidEl.dataset.src = gif.mp4;
+    vidEl.src = gif.mp4;
+    item.appendChild(vidEl);
+    overlay.appendChild(item);
+  }
+  item.style.cssText = `width:${gw}px;top:${top}px;left:${left}px;opacity:${opacity}`;
 }
 
 // ── Crop ──────────────────────────────────────────────────────
@@ -1585,6 +1741,152 @@ function closeEmojiPicker() {
   emojiPickerTarget = null;
 }
 
+function openEmojiPickerForItem(itemId, clientX, clientY) {
+  closeEmojiPicker();
+  emojiPickerTarget = { type: 'item', id: itemId };
+  const item = emojiItems.find(it => it.id === itemId);
+  if (!item) return;
+
+  const picker = document.createElement('div');
+  picker.className = 'emoji-picker';
+  picker.id = 'emoji-picker';
+
+  let html = `<div class="emoji-picker-header">
+    <span class="emoji-picker-title">Emoji på tidslinjen</span>
+    <button type="button" class="emoji-picker-close" onclick="closeEmojiPicker()">×</button>
+  </div>`;
+  for (const [cat, emojis] of Object.entries(EMOJI_CATEGORIES)) {
+    html += `<div class="emoji-category">${cat}</div><div class="emoji-grid">`;
+    html += emojis.map(e =>
+      `<span class="emoji-opt${item.emojis.includes(e) ? ' selected' : ''}" onclick="toggleEmojiItem(${itemId},'${e}',this)">${e}</span>`
+    ).join('');
+    html += '</div>';
+  }
+  // Delete button
+  html += `<button type="button" style="margin-top:8px;width:100%;background:var(--accent);border:none;color:white;padding:5px;border-radius:6px;cursor:pointer;font-size:12px" onclick="removeEmojiItem(${itemId})">🗑 Ta bort</button>`;
+  picker.innerHTML = html;
+  document.body.appendChild(picker);
+
+  picker.style.top  = `${Math.min(clientY, window.innerHeight - picker.offsetHeight - 10)}px`;
+  picker.style.left = `${Math.min(clientX, window.innerWidth  - 290)}px`;
+  setTimeout(() => document.addEventListener('click', outsidePickerClick), 0);
+}
+
+function toggleEmojiItem(itemId, emoji, el) {
+  const item = emojiItems.find(it => it.id === itemId);
+  if (!item) return;
+  const idx = item.emojis.indexOf(emoji);
+  if (idx >= 0) { item.emojis.splice(idx, 1); el.classList.remove('selected'); }
+  else { item.emojis.push(emoji); el.classList.add('selected'); }
+  drawTimeline();
+  updatePreview();
+}
+
+function removeEmojiItem(itemId) {
+  emojiItems = emojiItems.filter(it => it.id !== itemId);
+  closeEmojiPicker();
+  drawTimeline();
+  renderReactionList();
+  updatePreview();
+}
+
+function removeGifItem(itemId) {
+  gifItems = gifItems.filter(it => it.id !== itemId);
+  drawTimeline();
+  renderReactionList();
+  updateGifOverlay(document.getElementById('video-player').currentTime);
+}
+
+function _fmtSec(s) {
+  const m = Math.floor(s / 60), sec = (s % 60).toFixed(1);
+  return `${m}:${sec.padStart(4,'0')}`;
+}
+function _parseSec(str) {
+  const [m, s] = str.split(':').map(Number);
+  return (m || 0) * 60 + (s || 0);
+}
+
+function renderReactionList() {
+  const el = document.getElementById('reaction-list');
+  if (!el) return;
+  const EFFECTS = ['none','fadein','slideup','bounceup','zoomin','spin','shake'];
+  const EFFECT_LABELS = { none:'Ingen', fadein:'Tona fram', slideup:'Glid upp', bounceup:'Studsa upp', zoomin:'Zooma in', spin:'Snurra in', shake:'Skaka' };
+
+  const rows = [
+    ...emojiItems.map(item => ({ type:'emoji', item })),
+    ...gifItems.map(item => ({ type:'gif', item })),
+  ].sort((a, b) => a.item.start - b.item.start);
+
+  if (!rows.length) { el.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:8px">Inga emoji- eller GIF-block. Klicka i spåret eller använd + knapparna.</p>'; return; }
+
+  el.innerHTML = rows.map(({ type, item }) => {
+    const badge  = type === 'emoji' ? (item.emojis.slice(0,3).join('')||'😶') : '🎞';
+    const effOpts = EFFECTS.map(e => `<option value="${e}"${(item.effect||'none')===e?' selected':''}>${EFFECT_LABELS[e]}</option>`).join('');
+    const posX = item.posX ?? 50;
+    const posY = item.posY ?? 30;
+    const extra = type === 'gif'
+      ? `<div class="re-field"><label>Storlek %</label><input type="number" min="10" max="100" value="${item.size??50}" onchange="updateReItem('${type}',${item.id},'size',+this.value);"></div>
+         <div class="re-field"><label>Opacitet %</label><input type="number" min="10" max="100" value="${item.opacity??90}" onchange="updateReItem('${type}',${item.id},'opacity',+this.value);"></div>`
+      : `<button type="button" class="tl-btn" style="font-size:11px" onclick="openEmojiPickerForItem(${item.id},event.clientX,event.clientY)">Välj emojis</button>`;
+    return `<div class="re-item re-item-${type}">
+      <span class="re-badge">${badge}</span>
+      <div class="re-field">
+        <label>Start</label>
+        <input type="number" step="0.1" value="${item.start.toFixed(1)}" onchange="updateReItem('${type}',${item.id},'start',+this.value);" style="width:60px">
+      </div>
+      <div class="re-field">
+        <label>Slut</label>
+        <input type="number" step="0.1" value="${item.end.toFixed(1)}" onchange="updateReItem('${type}',${item.id},'end',+this.value);" style="width:60px">
+      </div>
+      <button type="button" class="re-del" onclick="removeReItem('${type}',${item.id})">×</button>
+      <div class="re-row2">
+        <div class="re-field"><label>Pos X %</label><input type="number" min="0" max="100" value="${posX}" onchange="updateReItem('${type}',${item.id},'posX',+this.value);" style="width:52px"></div>
+        <div class="re-field"><label>Pos Y %</label><input type="number" min="0" max="100" value="${posY}" onchange="updateReItem('${type}',${item.id},'posY',+this.value);" style="width:52px"></div>
+        <div class="re-field"><label>Effekt</label><select onchange="updateReItem('${type}',${item.id},'effect',this.value)">${effOpts}</select></div>
+        ${extra}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateReItem(type, id, field, value) {
+  const arr = type === 'emoji' ? emojiItems : gifItems;
+  const item = arr.find(it => it.id === id);
+  if (!item) return;
+  if (field === 'start') item.start = Math.max(0, value);
+  else if (field === 'end') item.end = Math.max(item.start + 0.1, value);
+  else item[field] = value;
+  drawTimeline();
+  updatePreview();
+  updateGifOverlay(document.getElementById('video-player').currentTime);
+}
+
+function removeReItem(type, id) {
+  if (type === 'emoji') { emojiItems = emojiItems.filter(it => it.id !== id); updatePreview(); }
+  else { gifItems = gifItems.filter(it => it.id !== id); updateGifOverlay(document.getElementById('video-player').currentTime); }
+  drawTimeline();
+  renderReactionList();
+}
+
+function addEmojiItemManual() {
+  const vid = document.getElementById('video-player');
+  const t = vid.style.display !== 'none' ? vid.currentTime : 0;
+  const item = { id: nextItemId++, start: t, end: t + 2, emojis: [], posX: 50, posY: 30, effect: 'bounceup' };
+  emojiItems.push(item);
+  drawTimeline();
+  renderReactionList();
+  openEmojiPickerForItem(item.id, window.innerWidth / 2, window.innerHeight / 2);
+}
+
+function addGifItemManual() {
+  if (!selectedGif) { alert('Välj en GIF i sökresultaten först.'); return; }
+  const vid = document.getElementById('video-player');
+  const t = vid.style.display !== 'none' ? vid.currentTime : 0;
+  gifItems.push({ id: nextItemId++, start: t, end: t + 3, gif: selectedGif, posX: 50, posY: 30, size: 50, opacity: 90, effect: 'slideup' });
+  drawTimeline();
+  renderReactionList();
+}
+
 function toggleEmoji(segIdx, emoji, el) {
   const arr = segmentEmojis[segIdx] || [];
   const idx = arr.indexOf(emoji);
@@ -1638,6 +1940,10 @@ function tlTotalDuration() {
 }
 
 let tlDragCanvasRect = null;
+let emojiItems = [];   // [{id,start,end,emojis:[]}]
+let gifItems   = [];   // [{id,start,end,gif:{}}]
+let nextItemId = 0;
+let selectedGif = null; // currently selected gif from search
 
 function initTimeline() {
   const bar = document.getElementById('timeline-bar');
@@ -1683,8 +1989,12 @@ function tlDims() {
   const W = canvas.width, H = canvas.height;
   const RULER = 20, WAVE = 54;
   const SUBS_Y = RULER + WAVE + 3;
-  const SUBS_H = H - SUBS_Y - 3;
-  return { W, H, RULER, WAVE, SUBS_Y, SUBS_H };
+  const SUBS_H = 36;
+  const EMOJI_Y = SUBS_Y + SUBS_H + 2;
+  const EMOJI_H = 26;
+  const GIF_Y = EMOJI_Y + EMOJI_H + 2;
+  const GIF_H = H - GIF_Y - 3;
+  return { W, H, RULER, WAVE, SUBS_Y, SUBS_H, EMOJI_Y, EMOJI_H, GIF_Y, GIF_H };
 }
 
 function tlX(t) { return (t - tlOffset) * tlZoom; }
@@ -1813,6 +2123,77 @@ function drawTimeline() {
     }
   });
 
+  // ── Emoji track ──
+  const { EMOJI_Y, EMOJI_H, GIF_Y, GIF_H } = tlDims();
+  ctx.fillStyle = '#08080f';
+  ctx.fillRect(0, EMOJI_Y, W, EMOJI_H);
+  ctx.fillStyle = '#1a1a28';
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('EMOJI', 2, EMOJI_Y + EMOJI_H / 2);
+
+  emojiItems.forEach((item, i) => {
+    const ex1 = tlX(item.start), ex2 = tlX(item.end);
+    if (ex2 < 0 || ex1 > W) return;
+    const ey1 = EMOJI_Y + 2, ey2 = EMOJI_Y + EMOJI_H - 2;
+    const isActive = tlDrag?.track === 'emoji' && tlDrag.segIdx === i;
+    ctx.fillStyle = isActive ? 'rgba(37,244,238,.25)' : 'rgba(254,220,0,.15)';
+    ctx.fillRect(Math.max(0, ex1), ey1, Math.min(W, ex2) - Math.max(0, ex1), ey2 - ey1);
+    ctx.strokeStyle = isActive ? '#25f4ee' : '#fee800';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(Math.max(0, ex1), ey1); ctx.lineTo(Math.min(W, ex2), ey1);
+    ctx.moveTo(Math.max(0, ex1), ey2); ctx.lineTo(Math.min(W, ex2), ey2);
+    ctx.stroke();
+    if (ex1 >= 0 && ex1 <= W) { ctx.beginPath(); ctx.moveTo(ex1, ey1); ctx.lineTo(ex1, ey2); ctx.stroke(); }
+    if (ex2 >= 0 && ex2 <= W) { ctx.beginPath(); ctx.moveTo(ex2, ey1); ctx.lineTo(ex2, ey2); ctx.stroke(); }
+    const label = item.emojis.slice(0, 4).join(' ') || '＋';
+    const bw = ex2 - ex1;
+    if (bw > 16) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(Math.max(0, ex1) + 2, ey1, Math.min(W, ex2) - Math.max(0, ex1) - 4, ey2 - ey1); ctx.clip();
+      ctx.font = `${Math.min(14, EMOJI_H - 6)}px serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, ex1 + bw / 2, EMOJI_Y + EMOJI_H / 2);
+      ctx.restore();
+    }
+  });
+
+  // ── GIF track ──
+  ctx.fillStyle = '#08080f';
+  ctx.fillRect(0, GIF_Y, W, GIF_H);
+  ctx.fillStyle = '#1a1a28';
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('GIF', 2, GIF_Y + GIF_H / 2);
+
+  gifItems.forEach((item, i) => {
+    const gx1 = tlX(item.start), gx2 = tlX(item.end);
+    if (gx2 < 0 || gx1 > W) return;
+    const gy1 = GIF_Y + 2, gy2 = GIF_Y + GIF_H - 2;
+    const isActive = tlDrag?.track === 'gif' && tlDrag.segIdx === i;
+    ctx.fillStyle = isActive ? 'rgba(37,244,238,.25)' : 'rgba(100,180,255,.13)';
+    ctx.fillRect(Math.max(0, gx1), gy1, Math.min(W, gx2) - Math.max(0, gx1), gy2 - gy1);
+    ctx.strokeStyle = isActive ? '#25f4ee' : '#64b4ff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(Math.max(0, gx1), gy1); ctx.lineTo(Math.min(W, gx2), gy1);
+    ctx.moveTo(Math.max(0, gx1), gy2); ctx.lineTo(Math.min(W, gx2), gy2);
+    ctx.stroke();
+    if (gx1 >= 0 && gx1 <= W) { ctx.beginPath(); ctx.moveTo(gx1, gy1); ctx.lineTo(gx1, gy2); ctx.stroke(); }
+    if (gx2 >= 0 && gx2 <= W) { ctx.beginPath(); ctx.moveTo(gx2, gy1); ctx.lineTo(gx2, gy2); ctx.stroke(); }
+    const bw = gx2 - gx1;
+    if (bw > 16 && item.gif?.title) {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(Math.max(0, gx1) + 2, gy1, Math.min(W, gx2) - Math.max(0, gx1) - 4, gy2 - gy1); ctx.clip();
+      ctx.fillStyle = isActive ? '#25f4ee' : '#64b4ffcc';
+      ctx.font = '9px Inter, sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(item.gif.title, gx1 + bw / 2, GIF_Y + GIF_H / 2);
+      ctx.restore();
+    }
+  });
+
   // ── Playhead ──
   const vid = document.getElementById('video-player');
   const ph = vid.style.display !== 'none' ? vid.currentTime : 0;
@@ -1850,15 +2231,15 @@ function tlFmtTime(s) {
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 }
 
-function tlGetHit(x) {
-  const HW = 10; // hit-width for edges in px
-  for (let i = segments.length - 1; i >= 0; i--) {
-    const x1 = tlX(segments[i].start), x2 = tlX(segments[i].end);
+function tlGetHit(x, track, items) {
+  const HW = 10;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const x1 = tlX(items[i].start), x2 = tlX(items[i].end);
     const hw = Math.min(HW, Math.max(4, (x2 - x1) / 4));
     if (x < x1 - 2 || x > x2 + 2) continue;
-    if (x <= x1 + hw) return { type: 'resize-start', segIdx: i };
-    if (x >= x2 - hw) return { type: 'resize-end', segIdx: i };
-    return { type: 'move', segIdx: i };
+    if (x <= x1 + hw) return { track, type: 'resize-start', segIdx: i };
+    if (x >= x2 - hw) return { track, type: 'resize-end',   segIdx: i };
+    return { track, type: 'move', segIdx: i };
   }
   return null;
 }
@@ -1878,25 +2259,46 @@ function tlNeighbours(segIdx) {
 function tlApplyDrag(clientX) {
   if (!tlDrag) return;
   const x = clientX - tlDragCanvasRect.left;
-  const dt = (x - tlDrag.startX) / tlZoom;
-  const seg = segments[tlDrag.segIdx];
-  const MIN = 0.05;
-  const { prevEnd, nextStart } = tlNeighbours(tlDrag.segIdx);
 
-  if (tlDrag.type === 'move') {
-    const dur = tlDrag.origEnd - tlDrag.origStart;
-    const ns = Math.max(prevEnd, Math.min(nextStart - dur, tlDrag.origStart + dt));
-    seg.start = Math.round(ns * 1000) / 1000;
-    seg.end   = Math.round((ns + dur) * 1000) / 1000;
-  } else if (tlDrag.type === 'resize-start') {
-    seg.start = Math.round(Math.max(prevEnd, Math.min(tlDrag.origEnd - MIN, tlDrag.origStart + dt)) * 1000) / 1000;
-  } else {
-    seg.end = Math.round(Math.min(nextStart, Math.max(tlDrag.origStart + MIN, tlDrag.origEnd + dt)) * 1000) / 1000;
+  if (tlDrag.type === 'pan') {
+    tlOffset = Math.max(0, tlDrag.origOffset - (x - tlDrag.startX) / tlZoom);
+    drawTimeline();
+    return;
   }
 
-  seg.words = distributeWords(seg.text, seg.start, seg.end);
-  updateTimeInputs(tlDrag.segIdx);
-  updatePreview();
+  const dt = (x - tlDrag.startX) / tlZoom;
+  const MIN = 0.05;
+  let item;
+
+  if (tlDrag.track === 'sub') {
+    item = segments[tlDrag.segIdx];
+    const { prevEnd, nextStart } = tlNeighbours(tlDrag.segIdx);
+    if (tlDrag.type === 'move') {
+      const dur = tlDrag.origEnd - tlDrag.origStart;
+      const ns = Math.max(prevEnd, Math.min(nextStart - dur, tlDrag.origStart + dt));
+      item.start = Math.round(ns * 1000) / 1000;
+      item.end   = Math.round((ns + dur) * 1000) / 1000;
+    } else if (tlDrag.type === 'resize-start') {
+      item.start = Math.round(Math.max(prevEnd, Math.min(tlDrag.origEnd - MIN, tlDrag.origStart + dt)) * 1000) / 1000;
+    } else {
+      item.end = Math.round(Math.min(nextStart, Math.max(tlDrag.origStart + MIN, tlDrag.origEnd + dt)) * 1000) / 1000;
+    }
+  } else {
+    const arr = tlDrag.track === 'emoji' ? emojiItems : gifItems;
+    item = arr[tlDrag.segIdx];
+    if (!item) return;
+    if (tlDrag.type === 'move') {
+      const dur = tlDrag.origEnd - tlDrag.origStart;
+      const ns = Math.max(0, tlDrag.origStart + dt);
+      item.start = Math.round(ns * 1000) / 1000;
+      item.end   = Math.round((ns + dur) * 1000) / 1000;
+    } else if (tlDrag.type === 'resize-start') {
+      item.start = Math.round(Math.max(0, Math.min(tlDrag.origEnd - MIN, tlDrag.origStart + dt)) * 1000) / 1000;
+    } else {
+      item.end = Math.round(Math.max(tlDrag.origStart + MIN, tlDrag.origEnd + dt) * 1000) / 1000;
+    }
+  }
+
   drawTimeline();
 }
 
@@ -1905,7 +2307,14 @@ function tlDocMove(e) { tlApplyDrag(e.clientX); }
 function tlDocUp() {
   document.removeEventListener('mousemove', tlDocMove);
   document.removeEventListener('mouseup', tlDocUp);
-  if (tlDrag) { renderSegmentsList(); tlDrag = null; }
+  if (tlDrag && tlDrag.type !== 'pan' && tlDrag.track === 'sub') {
+    const seg = segments[tlDrag.segIdx];
+    seg.words = distributeWords(seg.text, seg.start, seg.end);
+    updateTimeInputs(tlDrag.segIdx);
+    renderSegmentsList();
+    updatePreview();
+  }
+  tlDrag = null;
   const canvas = document.getElementById('timeline-canvas');
   if (canvas) canvas.style.cursor = 'crosshair';
   drawTimeline();
@@ -1913,39 +2322,88 @@ function tlDocUp() {
 
 function tlMouseDown(e) {
   const x = e.offsetX, y = e.offsetY;
-  const { SUBS_Y, SUBS_H } = tlDims();
-  if (y < SUBS_Y || y > SUBS_Y + SUBS_H) {
-    const vid = document.getElementById('video-player');
-    if (vid.style.display !== 'none') vid.currentTime = Math.max(0, tlT(x));
-    drawTimeline();
-    return;
-  }
-  const hit = tlGetHit(x);
-  if (!hit) {
-    const vid = document.getElementById('video-player');
-    if (vid.style.display !== 'none') vid.currentTime = Math.max(0, tlT(x));
-    return;
-  }
-  tlDrag = { type: hit.type, segIdx: hit.segIdx, startX: x,
-    origStart: segments[hit.segIdx].start, origEnd: segments[hit.segIdx].end };
+  const dims = tlDims();
+  const { SUBS_Y, SUBS_H, EMOJI_Y, EMOJI_H, GIF_Y, GIF_H } = dims;
   tlDragCanvasRect = e.currentTarget.getBoundingClientRect();
   document.addEventListener('mousemove', tlDocMove);
   document.addEventListener('mouseup', tlDocUp);
-  e.currentTarget.style.cursor = hit.type === 'move' ? 'grabbing' : 'ew-resize';
   e.preventDefault();
+
+  // Ruler or waveform → seek
+  if (y < SUBS_Y) {
+    const vid = document.getElementById('video-player');
+    if (vid.style.display !== 'none') vid.currentTime = Math.max(0, tlT(x));
+    tlDrag = { type: 'pan', startX: x, origOffset: tlOffset };
+    e.currentTarget.style.cursor = 'grabbing';
+    return;
+  }
+
+  if (y >= EMOJI_Y && y <= EMOJI_Y + EMOJI_H) {
+    const hit = tlGetHit(x, 'emoji', emojiItems);
+    if (hit) {
+      tlDrag = { ...hit, startX: x, origStart: emojiItems[hit.segIdx].start, origEnd: emojiItems[hit.segIdx].end };
+      e.currentTarget.style.cursor = hit.type === 'move' ? 'grabbing' : 'ew-resize';
+    } else {
+      // Add new emoji item at click position
+      const t = Math.max(0, tlT(x));
+      const item = { id: nextItemId++, start: t, end: t + 2, emojis: [], posX: 50, posY: 30, effect: 'bounceup' };
+      emojiItems.push(item);
+      drawTimeline();
+      renderReactionList();
+      openEmojiPickerForItem(item.id, e.clientX, e.clientY);
+      tlDrag = { type: 'pan', startX: x, origOffset: tlOffset };
+      e.currentTarget.style.cursor = 'grabbing';
+    }
+    return;
+  }
+
+  if (y >= GIF_Y && y <= GIF_Y + GIF_H) {
+    const hit = tlGetHit(x, 'gif', gifItems);
+    if (hit) {
+      tlDrag = { ...hit, startX: x, origStart: gifItems[hit.segIdx].start, origEnd: gifItems[hit.segIdx].end };
+      e.currentTarget.style.cursor = hit.type === 'move' ? 'grabbing' : 'ew-resize';
+    } else {
+      if (!selectedGif) { alert('Välj en GIF i sökresultaten först.'); document.removeEventListener('mousemove', tlDocMove); document.removeEventListener('mouseup', tlDocUp); return; }
+      const t = Math.max(0, tlT(x));
+      gifItems.push({ id: nextItemId++, start: t, end: t + 3, gif: selectedGif, posX: 50, posY: 30, size: 50, opacity: 90, effect: 'slideup' });
+      drawTimeline();
+      renderReactionList();
+      tlDrag = { type: 'pan', startX: x, origOffset: tlOffset };
+      e.currentTarget.style.cursor = 'grabbing';
+    }
+    return;
+  }
+
+  const inSubs = y >= SUBS_Y && y <= SUBS_Y + SUBS_H;
+  const hit = inSubs ? tlGetHit(x, 'sub', segments) : null;
+  if (hit) {
+    tlDrag = { ...hit, startX: x, origStart: segments[hit.segIdx].start, origEnd: segments[hit.segIdx].end };
+    e.currentTarget.style.cursor = hit.type === 'move' ? 'grabbing' : 'ew-resize';
+  } else {
+    tlDrag = { type: 'pan', startX: x, origOffset: tlOffset };
+    e.currentTarget.style.cursor = 'grabbing';
+  }
 }
 
 function tlMouseMove(e) {
-  if (tlDrag) return; // handled by document listener
+  if (tlDrag) return;
   const x = e.offsetX, y = e.offsetY;
-  const { SUBS_Y, SUBS_H } = tlDims();
+  const { SUBS_Y, SUBS_H, EMOJI_Y, EMOJI_H, GIF_Y, GIF_H } = tlDims();
   if (y >= SUBS_Y && y <= SUBS_Y + SUBS_H) {
-    const hit = tlGetHit(x);
+    const hit = tlGetHit(x, 'sub', segments);
     tlHoverSeg = hit ? hit.segIdx : -1;
-    e.currentTarget.style.cursor = !hit ? 'crosshair' : hit.type === 'move' ? 'grab' : 'ew-resize';
+    e.currentTarget.style.cursor = !hit ? 'grab' : hit.type === 'move' ? 'grab' : 'ew-resize';
+  } else if (y >= EMOJI_Y && y <= EMOJI_Y + EMOJI_H) {
+    tlHoverSeg = -1;
+    const hit = tlGetHit(x, 'emoji', emojiItems);
+    e.currentTarget.style.cursor = hit ? (hit.type === 'move' ? 'grab' : 'ew-resize') : 'cell';
+  } else if (y >= GIF_Y && y <= GIF_Y + GIF_H) {
+    tlHoverSeg = -1;
+    const hit = tlGetHit(x, 'gif', gifItems);
+    e.currentTarget.style.cursor = hit ? (hit.type === 'move' ? 'grab' : 'ew-resize') : 'cell';
   } else {
     tlHoverSeg = -1;
-    e.currentTarget.style.cursor = 'crosshair';
+    e.currentTarget.style.cursor = 'grab';
   }
   drawTimeline();
 }

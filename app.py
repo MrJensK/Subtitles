@@ -17,16 +17,76 @@ app = FastAPI()
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
+FONTS_DIR  = Path("fonts")
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
+FONTS_DIR.mkdir(exist_ok=True)
+
+
+def _has_libass(ffmpeg_bin: str) -> bool:
+    try:
+        r = subprocess.run([ffmpeg_bin, "-buildconf"], capture_output=True, text=True, timeout=5)
+        return "--enable-libass" in r.stdout
+    except Exception:
+        return False
+
+
+def _find_ffmpeg() -> str:
+    """Return an ffmpeg binary that has libass support, falling back to PATH default."""
+    candidates = [
+        shutil.which("ffmpeg"),
+        "/opt/homebrew/bin/ffmpeg",   # Apple Silicon Homebrew
+        "/usr/local/bin/ffmpeg",       # Intel Homebrew
+        "/usr/bin/ffmpeg",
+    ]
+    for path in candidates:
+        if path and os.path.isfile(path) and _has_libass(path):
+            return path
+    # No libass-capable build found — return whatever is in PATH
+    return shutil.which("ffmpeg") or "ffmpeg"
+
+
+FFMPEG = _find_ffmpeg()
+FFMPEG_HAS_LIBASS = _has_libass(FFMPEG)
 
 _model_cache = {}
+
+
+def _ensure_font(font_name: str) -> str | None:
+    """Download a Google Font TTF into fonts/ if not already cached.
+    Returns the absolute fonts dir path on success, None on failure."""
+    safe = re.sub(r'[^a-zA-Z0-9 ]', '', font_name).strip()
+    dest = FONTS_DIR / f"{safe.replace(' ', '_')}.ttf"
+    if dest.exists():
+        return str(FONTS_DIR.resolve())
+    try:
+        family = urllib.parse.quote(safe)
+        # Request CSS v1 with a basic UA so Google returns TTF (not WOFF2)
+        req = urllib.request.Request(
+            f"https://fonts.googleapis.com/css?family={family}",
+            headers={"User-Agent": "Mozilla/4.0"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as r:
+            css = r.read().decode()
+        m = re.search(r'url\((https://fonts\.gstatic\.com/[^)]+\.ttf)\)', css)
+        if not m:
+            return None
+        with urllib.request.urlopen(m.group(1), timeout=15) as r:
+            dest.write_bytes(r.read())
+        return str(FONTS_DIR.resolve())
+    except Exception:
+        return None
 
 
 def get_model(model_name: str):
     if model_name not in _model_cache:
         _model_cache[model_name] = whisper.load_model(model_name)
     return _model_cache[model_name]
+
+
+@app.get("/api/status")
+async def api_status():
+    return {"ffmpeg": FFMPEG, "libass": FFMPEG_HAS_LIBASS}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -181,34 +241,43 @@ async def export_video(
 
     ass_path = OUTPUT_DIR / "burn_subs.ass"
     out_path = OUTPUT_DIR / "output_with_subs.mp4"
+    abs_video = str(Path(video_path).resolve())
 
-    ass_data = {"segments": segments, "style": style, "words_per_chunk": words_per_chunk}
+    # Probe actual video dimensions so ASS PlayRes and positions scale correctly
+    probe = subprocess.run(
+        ["ffprobe", "-v", "quiet", "-print_format", "json",
+         "-show_streams", "-select_streams", "v:0", abs_video],
+        capture_output=True, text=True,
+    )
+    try:
+        pinfo = json.loads(probe.stdout)
+        vid_w = int(pinfo["streams"][0].get("width", 1080))
+        vid_h = int(pinfo["streams"][0].get("height", 1920))
+    except Exception:
+        vid_w, vid_h = 1080, 1920
 
     font = style.get("font", "Arial Black")
-    fontsize = style.get("fontsize", 22)
+    # Scale fontsize the same way the canvas preview does: relative to 1080px width baseline
+    fontsize = round(float(style.get("fontsize", 52)) * vid_w / 1080)
     primary = style.get("primary_color", "&H00FFFFFF")
     outline_color = style.get("outline_color", "&H00000000")
     highlight_color = style.get("highlight_color", "&H0000F0FF")
     bold = int(style.get("bold", True))
     outline = style.get("outline", 3)
     shadow = style.get("shadow", 0)
-    margin_v = style.get("margin_v", 80)
-    pos_x = round(1080 * float(style.get("pos_x_frac", 0.5)))
-    pos_y = round(1920 * float(style.get("pos_y_frac", 0.85)))
+    pos_x = round(vid_w * float(style.get("pos_x_frac", 0.5)))
+    pos_y = round(vid_h * float(style.get("pos_y_frac", 0.85)))
     pos_tag = f"{{\\pos({pos_x},{pos_y})}}"
 
     header = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: 1080
-PlayResY: 1920
+PlayResX: {vid_w}
+PlayResY: {vid_h}
 WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,{font},{fontsize},{primary},&H00FFFFFF,{outline_color},&H00000000,{bold},0,0,0,100,100,0,0,1,{outline},{shadow},2,10,10,{margin_v},1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Style: Default,{font},{fontsize},{primary},&H00FFFFFF,{outline_color},&H00000000,{bold},0,0,0,100,100,0,0,1,{outline},{shadow},2,10,10,40,1
 """
     events = []
     for seg in segments:
@@ -229,16 +298,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
     ass_path.write_text(header + "\n".join(events))
 
-    # Run ffmpeg from OUTPUT_DIR so the ass= filter gets a plain filename
-    # (absolute paths with slashes confuse ffmpeg's filter graph parser on macOS)
+    if FFMPEG_HAS_LIBASS:
+        fontsdir = _ensure_font(font)
+        fd_arg = f":fontsdir={fontsdir}" if fontsdir else ""
+        vf = f"subtitles=filename={ass_path.name}{fd_arg}"
+        cwd = str(OUTPUT_DIR.resolve())
+    else:
+        vf = _build_drawtext_vf(segments, style, words_per_chunk, vid_w, vid_h)
+        cwd = None
+
     cmd = [
-        "ffmpeg", "-y",
-        "-i", str(Path(video_path).resolve()),
-        "-vf", f"ass={ass_path.name}",
+        FFMPEG, "-y",
+        "-i", abs_video,
+        "-vf", vf,
         "-c:a", "copy",
         str(out_path.resolve()),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(OUTPUT_DIR.resolve()))
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     os.unlink(video_path)
 
     if result.returncode != 0:
@@ -249,7 +325,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 @app.get("/search_gifs")
 async def search_gifs(q: str, api_key: str = "", limit: int = 16):
-    key = api_key.strip() or "dc6zaTOxFJmzC"
+    key = api_key.strip()
+    if not key:
+        return {"results": [], "hint": "Ange en Giphy API-nyckel (gratis på developers.giphy.com)"}
     params = urllib.parse.urlencode({"api_key": key, "q": q, "limit": limit, "rating": "g"})
     try:
         with urllib.request.urlopen(f"https://api.giphy.com/v1/gifs/search?{params}", timeout=8) as r:
@@ -312,7 +390,7 @@ async def crop_video(
 
     out_path = OUTPUT_DIR / f"cropped_{aspect.replace(':','x')}.mp4"
     cmd = [
-        "ffmpeg", "-y", "-i", video_path,
+        FFMPEG, "-y", "-i", video_path,
         "-vf", f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale={out_w}:{out_h}",
         "-c:v", "libx264", "-crf", "18", "-preset", "fast",
         "-c:a", "aac", str(out_path),
@@ -471,7 +549,7 @@ async def export_highlights(
     if len(padded) == 1:
         s, e = padded[0]
         cmd = [
-            "ffmpeg", "-y", "-ss", str(s), "-to", str(e), "-i", video_path,
+            FFMPEG, "-y", "-ss", str(s), "-to", str(e), "-i", video_path,
             "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-c:a", "aac",
             str(out_path),
         ]
@@ -487,7 +565,7 @@ async def export_highlights(
             + f";{concat_in}concat=n={n}:v=1:a=1[vout][aout]"
         )
         cmd = [
-            "ffmpeg", "-y", "-i", video_path,
+            FFMPEG, "-y", "-i", video_path,
             "-filter_complex", filter_complex,
             "-map", "[vout]", "-map", "[aout]",
             "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-c:a", "aac",
@@ -514,6 +592,56 @@ def _ass_time_to_seconds(t: str) -> float:
     parts = t.strip().split(':')
     h, m, s = int(parts[0]), int(parts[1]), float(parts[2])
     return h * 3600 + m * 60 + s
+
+
+def _ass_to_hex(ass: str) -> str:
+    """Convert ASS &HAABBGGRR to ffmpeg 0xRRGGBB@alpha."""
+    c = ass.lstrip("&Hh")
+    aa = c[0:2] if len(c) >= 8 else "00"
+    bb = c[2:4] if len(c) >= 4 else "00"
+    gg = c[4:6] if len(c) >= 6 else "00"
+    rr = c[6:8] if len(c) >= 8 else (c[4:6] if len(c) >= 6 else "FF")
+    alpha = round(1.0 - int(aa, 16) / 255, 2)
+    return f"0x{rr}{gg}{bb}@{alpha}"
+
+
+def _dt_escape(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+
+
+def _build_drawtext_vf(segments: list, style: dict, words_per_chunk: int,
+                       vid_w: int = 1080, vid_h: int = 1920) -> str:
+    """Fallback subtitle filter using drawtext (no libass required)."""
+    # Scale fontsize the same way the canvas preview does: relative to 1080px width baseline
+    fontsize = round(int(style.get("fontsize", 52)) * vid_w / 1080)
+    font = style.get("font", "Arial Black")
+    fg = _ass_to_hex(style.get("primary_color", "&H00FFFFFF"))
+    border = _ass_to_hex(style.get("outline_color", "&H00000000"))
+    bw = round(int(style.get("outline", 3)) * vid_w / 1080)
+    px = float(style.get("pos_x_frac", 0.5))
+    py = float(style.get("pos_y_frac", 0.85))
+    x_expr = f"(w*{px}-text_w/2)"
+    y_expr = f"h*{py}-text_h"
+
+    parts = []
+    for seg in segments:
+        words = seg.get("words", [])
+        if not words:
+            chunks = [{"text": seg["text"], "start": seg["start"], "end": seg["end"]}]
+        else:
+            raw = [words[i:i + words_per_chunk] for i in range(0, len(words), words_per_chunk)]
+            chunks = [{"text": " ".join(w["word"].strip() for w in c),
+                       "start": c[0]["start"], "end": c[-1]["end"]} for c in raw]
+        for c in chunks:
+            txt = _dt_escape(c["text"])
+            parts.append(
+                f"drawtext=text='{txt}'"
+                f":font='{font}':fontsize={fontsize}:fontcolor={fg}"
+                f":bordercolor={border}:borderw={bw}"
+                f":x={x_expr}:y={y_expr}"
+                f":enable='between(t,{c['start']},{c['end']})'"
+            )
+    return ",".join(parts) if parts else "null"
 
 
 def _distribute_words(text: str, start: float, end: float) -> list:
